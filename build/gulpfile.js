@@ -75,7 +75,7 @@ gulp.task("default", function(cb) {
 
 gulp.task('generateDoc', function() {
 
-fs.readdir('./', function(err, items) {
+fs.readdir('../', function(err, items) {
     console.log(items);
 });
 
