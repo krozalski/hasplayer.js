@@ -39,7 +39,7 @@ var config = {
     distDir: '../dist',
     doc: {
         dir: '../dist/doc/',
-        template: 'node_modules/gulp-jsdoc/node_modules/ink-docstrap/template',
+        template: '../node_modules/gulp-jsdoc/node_modules/ink-docstrap/template',
         readMe: '../doc/JSDoc/README.md',
         errorTable: '../doc/JSDoc/HasPlayerErrors.html',
         fileSource: '../app/js/streaming/MediaPlayer.js'
@@ -74,6 +74,15 @@ gulp.task("default", function(cb) {
 });
 
 gulp.task('generateDoc', function() {
+
+fs.readdir('./', function(err, items) {
+    console.log(items);
+});
+
+fs.readdir(config.doc.template, function(err, items) {
+    console.log(items);
+});
+
     return gulp.src([config.doc.fileSource, config.doc.readMe])
         .pipe(jsdoc(config.doc.dir, {
             path: config.doc.template,

@@ -2,17 +2,17 @@ language: node_js
 branches:
     only:
         - master
-        - development
+        - test-travis
         - /^(?i:v).*$/
 env:
     global:
         - ENCRYPTION_LABEL: 98a7d362e1e4
     matrix:
         - BUILD=true TEST=false
-        - BUILD=false TEST=true BROWSER=chrome
-        - BUILD=false TEST=true BROWSER=ie
-        - BUILD=false TEST=true BROWSER=edge
-        - BUILD=false TEST=true BROWSER=firefox
+        # - BUILD=false TEST=true BROWSER=chrome
+        # - BUILD=false TEST=true BROWSER=ie
+        # - BUILD=false TEST=true BROWSER=edge
+        # - BUILD=false TEST=true BROWSER=firefox
 node_js:
     - stable
 addons:
