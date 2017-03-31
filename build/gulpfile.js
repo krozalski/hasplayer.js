@@ -79,8 +79,11 @@ fs.readdir('../node_modules/gulp-jsdoc/node_modules', function(err, items) {
     console.log(items);
 });
 
-fs.readdir(config.doc.template, function(err, items) {
-    console.log(items);
+fs.readFile('../node_modules/gulp-jsdoc/node_modules/package.json', 'utf8', function (err,data) {
+  if (err) {
+    return console.log(err);
+  }
+  console.log(data);
 });
 
     return gulp.src([config.doc.fileSource, config.doc.readMe])
@@ -88,7 +91,8 @@ fs.readdir(config.doc.template, function(err, items) {
             path: config.doc.template,
             'theme': 'united',
             'linenums': true,
-            'navType': 'vertical'
+            'navType': 'vertical',
+            "systemName": "hasplayer.js doc"
         }))
         .pipe(gulp.dest(config.doc.dir));
 });
