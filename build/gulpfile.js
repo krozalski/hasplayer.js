@@ -79,7 +79,7 @@ fs.readdir('../node_modules/gulp-jsdoc/node_modules', function(err, items) {
     console.log(items);
 });
 
-fs.readFile('../node_modules/gulp-jsdoc/node_modules/package.json', 'utf8', function (err,data) {
+fs.readFile('../node_modules/gulp-jsdoc/package.json', 'utf8', function (err,data) {
   if (err) {
     return console.log(err);
   }
