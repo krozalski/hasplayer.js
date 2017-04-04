@@ -10,7 +10,7 @@ var gulp = require('gulp'),
     footer = require('gulp-footer'),
     git = require('gulp-git'),
     htmlReplace = require('gulp-html-replace'),
-    jsdoc = require('gulp-jsdoc'),
+    jsdoc = require('gulp-jsdoc3'),
     jshint = require('gulp-jshint'),
     preprocess = require('gulp-preprocess'),
     rename = require('gulp-rename'),
@@ -40,9 +40,24 @@ var config = {
     doc: {
         dir: '../dist/doc/',
         template: '../node_modules/gulp-jsdoc/node_modules/ink-docstrap/template',
-        readMe: '../doc/JSDoc/README.md',
-        errorTable: '../doc/JSDoc/HasPlayerErrors.html',
-        fileSource: '../app/js/streaming/MediaPlayer.js'
+        readme: '../doc/JSDoc/README.md',
+        source: '../app/js/streaming/MediaPlayer.js',
+        errorTable: '../doc/JSDoc/HasPlayerErrors.html'
+    },
+    jsdoc: {
+        'opts': {
+            'destination': '../dist/doc/'
+        },
+        'templates': {
+            'theme': 'united',
+            'linenums': true,
+            "cleverLinks": false,
+            "monospaceLinks": false,
+            "collapseSymbols": false
+        },
+        "tags": {
+            "allowUnknownTags": true
+        }
     }
 };
 
@@ -65,49 +80,6 @@ if (argv.analytics) {
     sourcesGlob = sourcesGlob.concat(sources.analytics);
 }
 
-gulp.task("default", function(cb) {
-    runSequence('build', ['build-samples', 'doc'],
-        'releases-notes',
-        'zip',
-        'version',
-        cb);
-});
-
-gulp.task('generateDoc', function() {
-
-fs.readdir('../node_modules/gulp-jsdoc/node_modules', function(err, items) {
-    console.log(items);
-});
-
-fs.readFile('../node_modules/gulp-jsdoc/package.json', 'utf8', function (err,data) {
-  if (err) {
-    return console.log(err);
-  }
-  console.log(data);
-});
-
-    return gulp.src([config.doc.fileSource, config.doc.readMe])
-        .pipe(jsdoc(config.doc.dir, {
-            path: config.doc.template,
-            'theme': 'united',
-            'linenums': true,
-            'navType': 'vertical',
-            "systemName": "hasplayer.js doc"
-        }))
-        .pipe(gulp.dest(config.doc.dir));
-});
-
-gulp.task('doc', ['generateDoc'], function() {
-    return gulp.src(['../dist/doc/index.html'])
-        .pipe(htmlReplace({
-            'ERRORS_TABLE': {
-                src: fs.readFileSync(config.doc.errorTable).toString(),
-                tpl: '<div src="%f".js></div>'
-            }
-        }))
-        .pipe(gulp.dest(config.doc.dir));
-});
-
 gulp.task('clean', function(done) {
     return (function() {
         del([config.distDir + '**/*'], {
@@ -116,12 +88,6 @@ gulp.task('clean', function(done) {
         });
         done();
     })();
-});
-
-gulp.task('lint', function() {
-    return gulp.src(sourcesGlob)
-        .pipe(jshint())
-        .pipe(jshint.reporter('jshint-stylish'));
 });
 
 gulp.task('package-info', function() {
@@ -140,8 +106,10 @@ gulp.task('package-info', function() {
     });
 });
 
-gulp.task('version', function() {
-    fs.writeFileSync(config.distDir + '/version.properties', 'VERSION=' + pkg.version);
+gulp.task('lint', function() {
+    return gulp.src(sourcesGlob)
+        .pipe(jshint())
+        .pipe(jshint.reporter('jshint-stylish'));
 });
 
 gulp.task('build', ['clean', 'package-info', 'lint'], function() {
@@ -216,14 +184,42 @@ gulp.task('releases-notes', function() {
         .pipe(gulp.dest(config.distDir));
 });
 
+gulp.task('generateDoc', function() {
+    return gulp.src([config.doc.readme, config.doc.source], {read: true})
+        .pipe(jsdoc(config.jsdoc));
+});
+
+gulp.task('doc', ['generateDoc'], function() {
+    return gulp.src([config.doc.dir + 'index.html'], {base: './'})
+        .pipe(htmlReplace({
+            ERRORS_TABLE: {
+                src: fs.readFileSync(config.doc.errorTable).toString(),
+                tpl: '<div src="%f".js></div>'
+            }
+        }))
+        .pipe(gulp.dest('./'));
+});
+
 gulp.task('zip', function() {
     return gulp.src(config.distDir + '/**/*')
         .pipe(zip(pkg.name + '.zip'))
         .pipe(gulp.dest(config.distDir));
 });
 
-gulp.task('watch', function(){
+gulp.task('version', function() {
+    fs.writeFileSync(config.distDir + '/version.properties', 'VERSION=' + pkg.version);
+});
+
+gulp.task('watch', function() {
     gulp.watch(sourcesGlob, ['build']);
     gulp.watch(['../samples/DemoPlayer/**'], ['build-demoplayer']);
     gulp.watch(['../samples/Dash-IF/**'], ['build-dashif']);
+});
+
+gulp.task("default", function(cb) {
+    runSequence('build', ['build-samples', 'doc'],
+        'releases-notes',
+        'zip',
+        'version',
+        cb);
 });
