@@ -341,19 +341,6 @@ MediaPlayer.models.ProtectionModel_01b = function () {
                 throw new Error("Can not create sessions until you have selected a key system");
             }
 
-            // Check for duplicate initData.
-            var i;
-            for (i = 0; i < sessions.length; i++) {
-                if (this.protectionExt.initDataEquals(initData, sessions[i].initData)) {
-                    return;
-                }
-            }
-            for (i = 0; i < pendingSessions.length; i++) {
-                if (this.protectionExt.initDataEquals(initData, pendingSessions[i].initData)) {
-                    return;
-                }
-            }
-
             // Determine if creating a new session is allowed
             if (moreSessionsAllowed || sessions.length === 0) {
 
@@ -384,7 +371,7 @@ MediaPlayer.models.ProtectionModel_01b = function () {
             if (!this.protectionExt.isClearKey(this.keySystem)) {
                 // Send our request to the CDM
                 videoElement[api.addKey](this.keySystem.systemString,
-                        message, sessionToken.initData, sessionID);
+                        message, new Uint8Array(sessionToken.initData), sessionID);
             } else {
                 // For clearkey, message is a MediaPlayer.vo.protection.ClearKeyKeySet
                 for (var i = 0; i < message.keyPairs.length; i++) {

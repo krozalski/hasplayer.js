@@ -48,36 +48,9 @@ MediaPlayer.dependencies.protection.KeySystem_PlayReady = function() {
                 bytes,
                 self = this;
 
-            bytes = new Uint16Array(message.buffer);
+            bytes = new Uint8Array(message.buffer);
             msg = String.fromCharCode.apply(null, bytes);
             xmlDoc = parser.parseFromString(msg, "application/xml");
-
-            if (xmlDoc.getElementsByTagName("Challenge")[0]) {
-                var Challenge = xmlDoc.getElementsByTagName("Challenge")[0].childNodes[0].nodeValue;
-                if (Challenge) {
-                    decodedChallenge = BASE64.decode(Challenge);
-                }
-            }
-            else {
-                self.notify(MediaPlayer.dependencies.protection.KeySystem.eventList.ENAME_LICENSE_REQUEST_COMPLETE,
-                    null, new MediaPlayer.vo.Error(MediaPlayer.dependencies.ErrorHandler.prototype.MEDIA_KEYMESSERR_NOCHALLENGE, 'DRM: playready update, can not find Challenge in keyMessage', null));
-            }
-
-            var headerNameList = xmlDoc.getElementsByTagName("name");
-            var headerValueList = xmlDoc.getElementsByTagName("value");
-
-            if (headerNameList.length !== headerValueList.length) {
-                self.notify(MediaPlayer.dependencies.protection.KeySystem.eventList.ENAME_LICENSE_REQUEST_COMPLETE,
-                    null, new MediaPlayer.vo.Error(MediaPlayer.dependencies.ErrorHandler.prototype.MEDIA_KEYMESSERR_INVALID_HEADER, 'DRM: playready update, invalid header name/value pair in keyMessage', null));
-            }
-
-            for (var i = 0; i < headerNameList.length; i++) {
-                headers[headerNameList[i].childNodes[0].nodeValue] = headerValueList[i].childNodes[0].nodeValue;
-            }
-
-            if (protData && protData.bearerToken) {
-                headers.Authorization = protData.bearerToken;
-            }
 
             var xhr = new XMLHttpRequest();
             xhr.onload = function () {
@@ -99,7 +72,12 @@ MediaPlayer.dependencies.protection.KeySystem_PlayReady = function() {
                     null, new MediaPlayer.vo.Error(MediaPlayer.dependencies.ErrorHandler.prototype.MEDIA_KEYMESSERR_XHR_ERROR, 'DRM: playready update, XHR error. status is "' + xhr.statusText + '" (' + xhr.status + '), readyState is ' + xhr.readyState, null));
             };
 
-            xhr.open('POST', (protData && protData.laURL && protData.laURL !== "") ? protData.laURL : laURL);
+            var laUrlToSend = protData && protData.laURL && protData.laURL !== "" ? protData.laURL : laURL;
+            if (protData && protData.customData) {
+                var customData = BASE64.encode(protData.customData);
+                laUrlToSend += "?LAPB="+customData.replace(/\+/g,"%2B").replace(/=/g,"%3D");
+            }
+            xhr.open("POST", laUrlToSend);
             xhr.responseType = 'arraybuffer';
 
             headerOverrides = (protData) ? protData.httpRequestHeaders : null;
@@ -122,9 +100,11 @@ MediaPlayer.dependencies.protection.KeySystem_PlayReady = function() {
                 }
             }
 
+            xhr.setRequestHeader("content-type", "text/xml; charset=UTF-8");
+
             if (protData && protData.withCredentials) xhr.withCredentials = true;
 
-            xhr.send(decodedChallenge);
+            xhr.send(message);
         },
 
         parseInitDataFromContentProtection = function(cpData) {

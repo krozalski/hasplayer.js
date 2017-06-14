@@ -178,6 +178,9 @@ Mss.dependencies.MssFragmentController = function () {
                     saiz.default_sample_info_size = 8;
                 }
 
+                traf.removeBoxByType("saiz");
+                traf.removeBoxByType("saio");
+
                 //add saio and saiz box
                 traf.boxes.push(saiz);
                 traf.boxes.push(saio);

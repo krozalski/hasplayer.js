@@ -54,49 +54,6 @@ MediaPlayer.utils.Debug = function () {
         startTime = new Date(),
 
         _log = function (logLevel, args) {
-            var self = this;
-            if (getLogToBrowserConsole() && (logLevel <= getLevel())) {
-                var _logger = getLogger(),
-                    message = "",
-                    logTime = null;
-
-                if ((_logger === undefined) || (_logger === null)) {
-                    _logger = console;
-                }
-
-                if (showTimestamp) {
-                    logTime = new Date();
-                    message += "[" + logTime.HHMMSSmmm() + "]";
-                }
-
-                if (showElapsedTime) {
-                    message += "[" + new Date(logTime - startTime).MMSSmmm() + "]";
-                }
-
-                Array.apply(null, args).forEach(function(item) {
-                    message += item + " ";
-                });
-
-                switch (logLevel) {
-                    case ERROR:
-                        _logger.error(message);
-                        break;
-                    case WARN:
-                        _logger.warn(message);
-                        break;
-                    case INFO:
-                        _logger.info(message);
-                        break;
-                    case DEBUG:
-                        _logger.debug(message);
-                        break;
-                }
-            }
-
-            self.eventBus.dispatchEvent({
-                type: "log",
-                message: arguments[0]
-            });
         },
 
         getLogToBrowserConsole = function() {

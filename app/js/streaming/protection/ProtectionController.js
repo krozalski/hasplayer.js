@@ -79,9 +79,6 @@ MediaPlayer.dependencies.ProtectionController = function () {
             if (!this.keySystem) {
                 this.keySystem = this.protectionModel.keySystem;
             }
-            for (var i = 0; i < pendingNeedKeyData.length; i++) {
-                this.createKeySession(pendingNeedKeyData[i]);
-            }
             pendingNeedKeyData = [];
         },
 
@@ -218,6 +215,7 @@ MediaPlayer.dependencies.ProtectionController = function () {
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_SESSION_CREATED, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_SESSION_CLOSED, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_SESSION_REMOVED, this);
+            this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_NEED_KEY, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_MESSAGE, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_STATUSES_CHANGED, this);
             /*
@@ -260,7 +258,6 @@ MediaPlayer.dependencies.ProtectionController = function () {
                                                 for (var ksIdx = 0; ksIdx < supportedKS.length; ksIdx++) {
                                                     if (self.keySystem === supportedKS[ksIdx].ks) {
                                                         self.debug.log("[DRM] Create key session for key system " + self.keySystem.systemString);
-                                                        self.createKeySession(supportedKS[ksIdx].initData, supportedKS[ksIdx].cdmData);
                                                         break;
                                                     }
                                                 }
