@@ -43,14 +43,7 @@ MediaPlayer.dependencies.protection.KeySystem_PlayReady = function() {
                 key,
                 headerOverrides,
                 parser = new DOMParser(),
-                xmlDoc,
-                msg,
-                bytes,
                 self = this;
-
-            bytes = new Uint8Array(message.buffer);
-            msg = String.fromCharCode.apply(null, bytes);
-            xmlDoc = parser.parseFromString(msg, "application/xml");
 
             var xhr = new XMLHttpRequest();
             xhr.onload = function () {
