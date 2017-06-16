@@ -45,6 +45,7 @@ MediaPlayer.dependencies.protection.KeySystem_PlayReady = function() {
         protData,
 
         getRequestHeaders = function(message) {
+            /*
             var msg,
                 xmlDoc,
                 headers = {},
@@ -78,6 +79,8 @@ MediaPlayer.dependencies.protection.KeySystem_PlayReady = function() {
             }
 
             return headers;
+            */
+            return {};
         },
 
         getLicenseRequest = function(message) {

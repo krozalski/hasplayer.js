@@ -337,8 +337,17 @@ MediaPlayer.dependencies.ProtectionController = function() {
                 return;
             }
 
-            xhrLicense.open(licenseServerData.getHTTPMethod(messageType), url, true);
-            xhrLicense.responseType = licenseServerData.getResponseType(keySystemString, messageType);
+            var laUrlToSend = protData && protData.laURL && protData.laURL !== "" ? protData.laURL : laURL;
+            if (protData && protData.customData) {
+                var customData = BASE64.encode(protData.customData);
+                laUrlToSend += "?LAPB="+customData.replace(/\+/g,"%2B").replace(/=/g,"%3D");
+                console.log("url["+laUrlToSend+"]");
+            }
+            xhr.open("POST", laUrlToSend);
+            xhr.responseType = "arraybuffer";
+
+            // xhrLicense.open(licenseServerData.getHTTPMethod(messageType), url, true);
+            // xhrLicense.responseType = licenseServerData.getResponseType(keySystemString, messageType);
             xhrLicense.onload = function() {
 
                 if (this.status < 200 || this.status > 299) {
@@ -392,7 +401,9 @@ MediaPlayer.dependencies.ProtectionController = function() {
             if (protData) {
                 updateHeaders(protData.httpRequestHeaders);
             }
-            updateHeaders(this.keySystem.getRequestHeadersFromMessage(message));
+            //updateHeaders(this.keySystem.getRequestHeadersFromMessage(message));
+
+            xhr.setRequestHeader("content-type", "text/xml; charset=UTF-8");
 
             // Set withCredentials property from protData
             if (protData && protData.withCredentials) {
@@ -400,12 +411,12 @@ MediaPlayer.dependencies.ProtectionController = function() {
             }
 
             this.debug.log("[DRM] Send license request");
-            var licenseRequest = this.keySystem.getLicenseRequestFromMessage(message);
+            /* var licenseRequest = this.keySystem.getLicenseRequestFromMessage(message);
             if (licenseRequest === null) {
                 this.notify(MediaPlayer.dependencies.ProtectionController.eventList.ENAME_PROTECTION_ERROR,
                     new MediaPlayer.vo.Error(MediaPlayer.dependencies.ErrorHandler.prototype.MEDIA_KEYMESSERR_NO_CHALLENGE, "No license challenge from CDM key message"));
-            }
-            xhrLicense.send(licenseRequest);
+            } */
+            xhrLicense.send(message);
         },
 
         onNeedKey = function(event) {

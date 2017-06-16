@@ -14,7 +14,7 @@
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Last build : 2017-4-14_12:31:41 / git revision : 0641208 */
+/* Last build : 2017-6-15_16:3:27 / git revision : 15d8e40 */
 
 (function(root, factory) {
     if (typeof define === 'function' && define.amd) {
@@ -71,8 +71,8 @@ MediaPlayer = function () {
     ////////////////////////////////////////// PRIVATE ////////////////////////////////////////////
     var VERSION_DASHJS = '1.2.0',
         VERSION = '1.10.0',
-        GIT_TAG = '0641208',
-        BUILD_DATE = '2017-4-14_12:31:41',
+        GIT_TAG = '15d8e40',
+        BUILD_DATE = '2017-6-15_16:3:27',
         context = new MediaPlayer.di.Context(), // default context
         system = new dijon.System(), // dijon system instance
         initialized = false,
@@ -4239,12 +4239,8 @@ MediaPlayer.di.Context = function () {
         var videoElement = document.createElement("video"),
             debug = this.system.getObject("debug");
 
-        // Detect EME APIs.  Look for newest API versions first
-        if (MediaPlayer.models.ProtectionModel_21Jan2015.detect(videoElement)) {
-            this.system.mapSingleton('protectionModel', MediaPlayer.models.ProtectionModel_21Jan2015);
-        } else if (MediaPlayer.models.ProtectionModel_3Feb2014.detect(videoElement)) {
-            this.system.mapClass('protectionModel', MediaPlayer.models.ProtectionModel_3Feb2014);
-        } else if (MediaPlayer.models.ProtectionModel_01b.detect(videoElement)) {
+        // Detect EME APIs.
+        if (MediaPlayer.models.ProtectionModel_01b.detect(videoElement)) {
             this.system.mapClass('protectionModel', MediaPlayer.models.ProtectionModel_01b);
         } else {
             debug.log("No supported version of EME detected on this user agent!");
@@ -4467,27 +4463,6 @@ MediaPlayer.utils.Debug = function () {
         _logger = console,
 
         _log = function (logLevel, args) {
-            if (logLevel <= getLevel()) {
-
-                var message = _prepareLog(logLevel, args);
-
-                switch (logLevel) {
-                    case ERROR:
-                        _logger.error(message);
-                        break;
-                    case WARN:
-                        _logger.warn(message);
-                        break;
-                    case INFO:
-                        _logger.info(message);
-                        break;
-                    case DEBUG:
-                        _logger.debug(message);
-                        break;
-                }
-                
-            }
-
         },
 
         _prepareLog = function(logLevel, args){
@@ -11529,6 +11504,915 @@ MediaPlayer.dependencies.XHRLoader.prototype = {
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+MediaPlayer.dependencies.TextController = function() {
+
+    var LOADING = "LOADING",
+        //LOADED = "LOADED",
+        READY = "READY",
+        initialized = false,
+        periodInfo = null,
+        mediaSource,
+        data,
+        buffer,
+        availableRepresentations,
+        state = READY,
+        setState = function(value) {
+            this.debug.log("TextController setState to:" + value);
+            state = value;
+        },
+        startPlayback = function() {
+
+            if (!initialized || state !== READY) {
+                return;
+            }
+
+            var self = this;
+            // TODO Multiple tracks can be handled here by passing in quality level.
+            self.indexHandler.getInitRequest(availableRepresentations[0]).then(
+                function(request) {
+                    //self.debug.log("Loading text track initialization: " + request.url);
+                    //self.debug.log(request);
+                    self.fragmentLoader.load(request).then(onBytesLoaded.bind(self, request), onBytesError.bind(self, request));
+                    setState.call(self, LOADING);
+                }
+            );
+        },
+        doStart = function() {
+            startPlayback.call(this);
+        },
+
+        updateRepresentations = function(data, periodInfo) {
+            var adaptations,
+                manifest = this.manifestModel.getValue(),
+                idx;
+
+            idx = this.manifestExt.getDataIndex(data, manifest, periodInfo.index);
+
+            adaptations = this.manifestExt.getAdaptationsForPeriod(manifest, periodInfo);
+            return this.manifestExt.getRepresentationsForAdaptation(manifest, adaptations[idx]);
+        },
+
+        onBytesLoaded = function(request, response) {
+            var self = this;
+            //self.debug.log(" Text track Bytes finished loading: " + request.url);
+            // ORANGE: add request parameter to retrieve startTime and timescale in fragmentController
+            self.fragmentController.process(response.data, request).then(
+                function(data) {
+                    if (data !== null) {
+                        //self.debug.log("Push text track bytes: " + data.byteLength);
+                        self.sourceBufferExt.append(buffer, data, self.videoModel);
+                    }
+                }
+            );
+        },
+
+        onBytesError = function( /*request*/ ) {};
+
+    return {
+        videoModel: undefined,
+        fragmentLoader: undefined,
+        fragmentController: undefined,
+        indexHandler: undefined,
+        sourceBufferExt: undefined,
+        manifestModel: undefined,
+        manifestExt: undefined,
+        debug: undefined,
+        initialize: function(periodInfo, data, buffer, videoModel, source) {
+            var self = this;
+
+            self.setVideoModel(videoModel);
+            self.setBuffer(buffer);
+            self.setMediaSource(source);
+
+            self.updateData(data, periodInfo);
+
+            initialized = true;
+            
+            startPlayback.call(self);
+        },
+
+        setPeriodInfo: function(value) {
+            periodInfo = value;
+        },
+
+        getPeriodIndex: function() {
+            return periodInfo.index;
+        },
+
+        getVideoModel: function() {
+            return this.videoModel;
+        },
+
+        setVideoModel: function(value) {
+            this.videoModel = value;
+        },
+
+        getData: function() {
+            return data;
+        },
+
+        setData: function(value) {
+            data = value;
+        },
+
+        getBuffer: function() {
+            return buffer;
+        },
+
+        setBuffer: function(value) {
+            buffer = value;
+        },
+
+        setMediaSource: function(value) {
+            mediaSource = value;
+        },
+
+        updateData: function(dataValue, periodInfoValue) {
+            data = dataValue;
+            periodInfo = periodInfoValue;
+
+            availableRepresentations = updateRepresentations.call(this, data, periodInfo);
+            setState.call(this, READY);
+            startPlayback.call(this);
+        },
+
+        reset: function(errored) {
+            if (!errored) {
+                this.sourceBufferExt.abort(mediaSource, buffer);
+                this.sourceBufferExt.removeSourceBuffer(mediaSource, buffer);
+            }
+        },
+
+        start: doStart
+    };
+};
+
+MediaPlayer.dependencies.TextController.prototype = {
+    constructor: MediaPlayer.dependencies.TextController
+};
+/*
+ * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
+ *
+ * Copyright (c) 2013, Akamai Technologies
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+ * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+ * •  Neither the name of the Akamai Technologies nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+MediaPlayer.dependencies.TextSourceBuffer = function () {
+
+    var video,
+        data,
+        mimeType,
+
+        decodeUtf8 = function(arrayBuffer) {
+            var result = "",
+                i = 0,
+                c = 0,
+                c2 = 0,
+                c3 = 0,
+                data = new Uint8Array(arrayBuffer);
+
+            // If we have a BOM skip it
+            if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
+                i = 3;
+            }
+
+            while (i < data.length) {
+                c = data[i];
+
+                if (c < 128) {
+                    result += String.fromCharCode(c);
+                    i++;
+                } else if (c > 191 && c < 224) {
+                    if (i + 1 >= data.length) {
+                        throw "UTF-8 Decode failed. Two byte character was truncated.";
+                    }
+                    c2 = data[i + 1];
+                    result += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
+                    i += 2;
+                } else {
+                    if (i + 2 >= data.length) {
+                        throw "UTF-8 Decode failed. Multi byte character was truncated.";
+                    }
+                    c2 = data[i + 1];
+                    c3 = data[i + 2];
+                    result += String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
+                    i += 3;
+                }
+            }
+            return result;
+        },
+
+        buffered = {
+            length: 0,
+            ranges: [],
+
+            start: function(index) {
+                return this.ranges[index].start;
+            },
+
+            end: function(index) {
+                return this.ranges[index].end;
+            },
+
+            addRange: function(start, end) {
+                var i = 0,
+                    rangesUpdated = false,
+                    tolerance = 0.01;
+
+                //detect discontinuity in ranges.
+                for (i = 0; i < this.ranges.length; i++) {
+                    if (this.ranges[i].end <= (start + tolerance) && this.ranges[i].end >= (start - tolerance)) {
+                        rangesUpdated = true;
+                        this.ranges[i].end = end;
+                    }
+
+                    if (this.ranges[i].start <= (end + tolerance) && this.ranges[i].start >= (end - tolerance)) {
+                        rangesUpdated = true;
+                        this.ranges[i].start = start;
+                    }
+                }
+
+                if (!rangesUpdated) {
+                    this.ranges.push({
+                        start: start,
+                        end: end
+                    });
+                    this.length = this.length + 1;
+
+                    // TimeRanges must be normalized
+                    this.ranges.sort(function(a, b) {
+                        return a.start - b.start;
+                    });
+                }
+            },
+
+            removeRange: function(start, end) {
+                var i = 0;
+                for (i = this.ranges.length - 1; i >= 0; i -= 1) {
+                    if (((end === undefined || end === -1) || (this.ranges[i].end <= end)) &&
+                        ((start === undefined || start === -1) || (this.ranges[i].start >= start))) {
+                        this.ranges.splice(i, 1);
+                    }
+                }
+
+                this.length = this.ranges.length;
+            },
+
+            reset: function() {
+                this.length = 0;
+                this.ranges = [];
+            }
+        };
+
+    return {
+        system:undefined,
+        eventBus:undefined,
+        errHandler: undefined,
+        textTrackExtensions: undefined,
+        buffered: buffered,
+
+        initialize: function (type, bufferController) {
+            mimeType = type;
+            video = bufferController.getVideoModel().getElement();
+            data = bufferController.getData();
+            buffered.reset();
+        },
+
+        remove: function(start, end) {
+            if (start < 0 || start >= end) {
+                throw "INVALID_ACCESS_ERR";
+            }
+
+            this.textTrackExtensions.deleteCues(video, false, start, end);
+            this.buffered.removeRange(start, end);
+        },
+
+        append: function (bytes, request) {
+            var self = this,
+                ccContent = decodeUtf8(bytes),
+                cues = self.getParser().parse(ccContent, request);
+
+            if (video.textTracks.length === 0) {
+                // We need to create the TextTrack
+                self.textTrackExtensions.addTextTrack(video, [], data.Representation_asArray[0].id, data.lang, true);
+            }
+
+            if (video.textTracks.length === 0) {
+                // Failed to create TextTrack, should never happen
+                return;
+            }
+
+            self.textTrackExtensions.addCues(video.textTracks[0], cues);
+
+            if (request) {
+                self.buffered.addRange(request.startTime, request.startTime + request.duration);
+            }
+        },
+
+        abort: function() {
+            this.textTrackExtensions.deleteCues(video);
+            this.buffered.reset();
+        },
+
+        getParser: function() {
+            var parser;
+
+            if (mimeType === "text/vtt") {
+                parser = this.system.getObject("vttParser");
+            } /*else if (mimeType === "application/ttml+xml") {
+                parser = this.system.getObject("ttmlParser");
+            }*/
+
+            return parser;
+        },
+
+        addEventListener: function (type, listener, useCapture) {
+            this.eventBus.addEventListener(type, listener, useCapture);
+        },
+
+        removeEventListener: function (type, listener, useCapture) {
+            this.eventBus.removeEventListener(type, listener, useCapture);
+        }
+    };
+};
+
+MediaPlayer.dependencies.TextSourceBuffer.prototype = {
+    constructor: MediaPlayer.dependencies.TextSourceBuffer
+};
+
+/*
+ * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
+ *
+ * Copyright (c) 2013, Akamai Technologies
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+ * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+ * •  Neither the name of the Akamai Technologies nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+MediaPlayer.utils.TextTrackExtensions = function() {
+    "use strict";
+    var Cue,
+        currentLanguage = "",
+        ttmlRenderer = null;
+
+    return {
+        system: undefined,
+        eventBus: undefined,
+        videoModel: undefined,
+        debug: undefined,
+        config: undefined,
+
+        setup: function() {
+            Cue = window.VTTCue || window.TextTrackCue;
+        },
+
+        cueEnter: function(subtitle_style, subtitle_text, subtitle_type) {
+            this.eventBus.dispatchEvent({
+                type: "cueEnter",
+                data: {
+                    text: subtitle_text,
+                    style: subtitle_style,
+                    type: subtitle_type
+                }
+            });
+        },
+
+        cueExit: function(subtitle_style, subtitle_text, subtitle_type) {
+            this.eventBus.dispatchEvent({
+                type: "cueExit",
+                data: {
+                    text: subtitle_text,
+                    style: subtitle_style,
+                    type: subtitle_type
+                }
+            });
+        },
+
+        getCurrentTextTrack: function(video){
+            for(var i=0; i< video.textTracks.length; i++){
+                if(video.textTracks[i].label === 'hascaption'){
+                    return video.textTracks[i];
+                }
+            }
+            return null;
+        },
+
+        addTextTrack: function(video, captionData, label, scrlang, isDefaultTrack) {
+            var track = null,
+                currentItem = null,
+                subtitleDisplayMode = 'subtitles',
+                renderingDiv = this.videoModel.getTTMLRenderingDiv(),
+                i;
+
+            //no function removeTextTrack is defined
+            //add one, only if it's necessary
+            //deleteCues will be very efficient in this case
+            track = this.getCurrentTextTrack(video);
+            if (!track) {
+                if (renderingDiv) {
+                    ttmlRenderer = this.system.getObject("ttmlRenderer");
+                    ttmlRenderer.initialize(renderingDiv);
+                }
+                subtitleDisplayMode = renderingDiv !== null ? 'metadata' : 'subtitles';
+                if (subtitleDisplayMode === 'subtitles') {
+                    subtitleDisplayMode = this.config.getParam("TextTrackExtensions.displayModeExtern", "boolean") === true ? 'metadata' : 'subtitles';
+                }
+                //TODO: Ability to define the KIND in the MPD - ie subtitle vs caption....
+                track = video.addTextTrack(subtitleDisplayMode, 'hascaption', scrlang);
+                currentLanguage = scrlang;
+                // track.default is an object property identifier that is a reserved word
+                // The following jshint directive is used to suppressed the warning "Expected an identifier and instead saw 'default' (a reserved word)"
+                /*jshint -W024 */
+                track.default = isDefaultTrack;
+                if (subtitleDisplayMode !== 'metadata') {
+                    track.mode = "showing";
+                }else{
+                    track.mode = "hidden";
+                }
+
+            } else {
+                this.cleanSubtitles();
+                track.default = isDefaultTrack;
+                if (track.mode !== 'showing' && track.kind !== 'metadata') {
+                    track.mode = "showing";
+                }
+                currentLanguage = scrlang;
+            }
+
+            for (i = 0; i < captionData.length; i += 1) {
+                currentItem = captionData[i];
+                track.addCue(new Cue(currentItem.start, currentItem.end, currentItem.data));
+            }
+
+            return track;
+        },        
+
+        onCueEnter: function(e) {
+            var renderingDiv = this.videoModel.getTTMLRenderingDiv();
+
+            if (e.currentTarget.type === 'image' && renderingDiv === null) {
+                this.debug.warn("[TextTrackExtensions] Rendering image subtitles without div is impossible");
+            }
+
+            if (renderingDiv) {
+                ttmlRenderer.onCueEnter(e);
+            }
+            this.cueEnter(e.currentTarget.style, e.currentTarget.text, e.currentTarget.type);
+        },
+
+        onCueExit: function(e) {
+            var renderingDiv = this.videoModel.getTTMLRenderingDiv();
+
+            if (renderingDiv) {
+                ttmlRenderer.onCueExit(e);
+            }
+            this.cueExit(e.currentTarget.style, e.currentTarget.text);
+        },
+
+        // Orange: addCues added so it is possible to add cues during playback,
+        //         not only during track initialization
+
+        addCues: function(track, captionData) {
+            var i = 0,
+                currentItem = null,
+                newCue = null;
+
+            for (i = 0; i < captionData.length; i += 1) {
+                currentItem = captionData[i];
+                if (currentItem.start < currentItem.end) {
+                    newCue = new Cue(currentItem.start, currentItem.end, currentItem.data);
+
+                    newCue.id = currentLanguage;
+                    newCue.type = currentItem.type;
+                    newCue.onenter = this.onCueEnter.bind(this);
+                    newCue.onexit = this.onCueExit.bind(this);
+                    newCue.snapToLines = false;
+                    newCue.line = currentItem.line;
+
+                    if (currentItem.style) {
+                        newCue.style = currentItem.style;
+                    }
+
+                    track.addCue(newCue);
+                }
+            }
+        },
+
+        deleteCues: function(video, disabled, start, end) {
+            var track = null,
+                cues = null,
+                lastIdx = null,
+                currentTrackMode,
+                i = 0;
+
+            //when multiple tracks are supported - iterate through and delete all cues from all tracks.
+            if (video) {
+                track = video.textTracks[0];
+                if (track) {
+                    currentTrackMode = track.mode;
+                    //if track mode is disabled, the cues are not accessible
+                    //we have to change the mode value to be sure the delete process is correctly executed.
+                    if (currentTrackMode === 'disabled') {
+                        track.mode = 'hidden';
+                    }
+                    cues = track.cues;
+                    if (cues) {
+                        lastIdx = cues.length - 1;
+
+                        for (i = lastIdx; i >= 0; i -= 1) {
+                            if (((end === undefined || end === -1) || (cues[i].endTime <= end)) &&
+                                ((start === undefined || start === -1) || (cues[i].startTime >= start))) {
+                                track.removeCue(cues[i]);
+                            }
+                        }
+                    }
+                    track.mode = currentTrackMode;
+                }
+            }
+        },
+
+        cleanSubtitles: function() {
+            var renderingDiv = this.videoModel.getTTMLRenderingDiv();
+            if (renderingDiv && ttmlRenderer) {
+                ttmlRenderer.cleanSubtitles();
+            }
+        },
+    };
+};
+/*
+ * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
+ *
+ * Copyright (c) 2014, Orange
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+ * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+ * •  Neither the name of the Akamai Technologies nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+
+// Orange: This Source Buffer processes TTML+XML subtitles encapsulated in the mp4
+//         This format is used by smoothstreaming headends
+
+MediaPlayer.dependencies.TextTTMLXMLMP4SourceBuffer = function() {
+
+    var video,
+        mimeType,
+        currentLang,
+        currentId,
+
+        // We need to simulate TimeRanges, as defined 
+        // by Media Streaming Extensions.
+        // start() and end() functions must be provided,
+        // as player checks the buffer level using these
+
+        buffered = {
+            length: 0,
+            ranges: [],
+
+            start: function(index) {
+                return this.ranges[index].start;
+            },
+
+            end: function(index) {
+                return this.ranges[index].end;
+            },
+
+            addRange: function(start, end) {
+                var i = 0,
+                    rangesUpdated = false,
+                    tolerance = 0.01;
+
+                //detect discontinuity in ranges.
+                for (i = 0; i < this.ranges.length; i++) {
+                    if (this.ranges[i].end <= (start + tolerance) && this.ranges[i].end >= (start - tolerance)) {
+                        rangesUpdated = true;
+                        this.ranges[i].end = end;
+                    }
+
+                    if (this.ranges[i].start <= (end + tolerance) && this.ranges[i].start >= (end - tolerance)) {
+                        rangesUpdated = true;
+                        this.ranges[i].start = start;
+                    }
+                }
+
+                if (!rangesUpdated) {
+                    this.ranges.push({
+                        start: start,
+                        end: end
+                    });
+                    this.length = this.length + 1;
+
+                    // TimeRanges must be normalized
+                    this.ranges.sort(function(a, b) {
+                        return a.start - b.start;
+                    });
+                }
+            },
+
+            removeRange: function(start, end) {
+                var i = 0;
+                for (i = this.ranges.length - 1; i >= 0; i -= 1) {
+                    if (((end === undefined || end === -1) || (this.ranges[i].end <= end)) &&
+                        ((start === undefined || start === -1) || (this.ranges[i].start >= start))) {
+                        this.ranges.splice(i, 1);
+                    }
+                }
+
+                this.length = this.ranges.length;
+            },
+
+            reset: function() {
+                this.length = 0;
+                this.ranges = [];
+            }
+        };
+
+    return {
+        updating: false,
+        system: undefined,
+        eventBus: undefined,
+        buffered: buffered,
+        textTrackExtensions: undefined,
+        ttmlParser: undefined,
+        debug: undefined,
+        manifestModel: undefined,
+
+        initialize: function(type, bufferController, subtitleData) {
+            mimeType = type;
+            video = bufferController.getVideoModel().getElement();
+            buffered.reset();
+            currentLang = subtitleData.lang;
+            currentId = subtitleData.id;
+        },
+        remove: function(start, end) {
+            /*If start is negative or greater than duration, then throw an INVALID_ACCESS_ERR exception and abort these steps.
+            If end is less than or equal to start, then throw an INVALID_ACCESS_ERR exception and abort these steps.
+            If this object has been removed from the sourceBuffers attribute of the parent media source then throw an INVALID_STATE_ERR exception and abort these steps.
+            If the updating attribute equals true, then throw an INVALID_STATE_ERR exception and abort these steps.
+            If the readyState attribute of the parent media source is in the "ended" state then run the following steps:
+
+            Set the readyState attribute of the parent media source to "open"
+            Queue a task to fire a simple event named sourceopen at the parent media source .
+            Set the updating attribute to true.
+            Queue a task to fire a simple event named updatestart at this SourceBuffer object.
+            Return control to the caller and run the rest of the steps asynchronously.
+            Run the coded frame removal algorithm with start and end as the start and end of the removal range.
+            Set the updating attribute to false.
+            Queue a task to fire a simple event named update at this SourceBuffer object.
+            Queue a task to fire a simple event named updateend at this SourceBuffer object.*/
+            if (start < 0 || start >= end) {
+                throw "INVALID_ACCESS_ERR";
+            }
+
+            this.getTextTrackExtensions().deleteCues(video, false, start, end);
+            this.buffered.removeRange(start, end);
+        },
+
+        append: function(bytes) {
+            var self = this,
+                file = mp4lib.deserialize(bytes),
+                moov = file.getBoxByType('moov'),
+                mvhd,
+                moof,
+                mdat,
+                traf,
+                tfhd,
+                tfdt,
+                trun,
+                fragmentStart,
+                fragmentDuration = 0,
+                encoding = 'utf-8';
+
+            //no mp4, all the subtitles are in one xml file
+            if (mimeType === 'application/ttml+xml') {
+                this.track = this.textTrackExtensions.addTextTrack(video, [], currentId, currentLang, true);
+
+                //detect utf-16 encoding
+                if (self.isUTF16(bytes)) {
+                    encoding = 'utf-16';
+                }
+
+                this.convertUTFToString(bytes, encoding)
+                    .then(function(result) {
+                        self.ttmlParser.parse(result).then(function(cues) {
+                            if (cues) {
+
+                                self.textTrackExtensions.addCues(self.track, cues);
+                                self.buffered.addRange(0, video.duration);
+                                self.eventBus.dispatchEvent({
+                                    type: "updateend"
+                                });
+                            }
+                        }, function( /*error*/ ) {
+                            //self.debug.error("[TextTTMLXMLMP4SourceBuffer] error parsing TTML "+error);
+                        });
+                    });
+                return;
+            }
+
+            if (moov) {
+                // This must be an init segment, if it has a moov box.
+                // We need it to read the timescale, as it will be 
+                // used to compute fragments time ranges.
+
+                mvhd = moov.getBoxByType('mvhd');
+                self.timescale = mvhd.timescale;
+
+                // Also, it is a good moment to set up a text track on videoElement
+                // TODO: set up name and language 
+                this.track = this.textTrackExtensions.addTextTrack(video, [], currentId, currentLang, true);
+                this.eventBus.dispatchEvent({
+                    type: "updateend"
+                });
+                return;
+            }
+
+            moof = file.getBoxByType('moof');
+            if (moof) {
+
+                // This is a subtitles track fragment
+                // let's decode the data and add captions to video element
+                mdat = file.getBoxByType('mdat');
+
+                // We need to update TimeRanges.                            
+                // assume that there is a single text sample in fragment
+                traf = moof.getBoxByType('traf');
+                tfhd = traf.getBoxByType('tfhd');
+                tfdt = traf.getBoxByType('tfdt');
+                trun = traf.getBoxByType('trun');
+
+                fragmentStart = tfdt.baseMediaDecodeTime / self.timescale;
+                fragmentDuration = 0;
+                if (trun.flags & 0x000100) {
+                    fragmentDuration = trun.samples_table[0].sample_duration / self.timescale;
+                } else {
+                    fragmentDuration = tfhd.default_sample_duration / self.timescale;
+                }
+
+                self.buffered.addRange(fragmentStart, fragmentStart + fragmentDuration);
+
+                //detect utf-16 encoding
+                if (self.isUTF16(mdat.data)) {
+                    encoding = 'utf-16';
+                }
+                // parse data and add to cues
+                self.convertUTFToString(mdat.data, encoding)
+                    .then(function(result) {
+                        self.ttmlParser.parse(result).then(function(cues) {
+                            var i,
+                            manifest = self.manifestModel.getValue();
+
+                            if (cues) {
+                                if (manifest.name === 'MSS') {
+                                    for (i = 0; i < cues.length; i += 1) {
+                                        cues[i].start = cues[i].start + fragmentStart;
+                                        cues[i].end = cues[i].end + fragmentStart;
+                                    }
+                                }
+
+                                self.textTrackExtensions.addCues(self.track, cues);
+
+                                self.eventBus.dispatchEvent({
+                                    type: "updateend"
+                                });
+                            }
+                        }, function( /*error*/ ) {
+                            //self.debug.error("[TextTTMLXMLMP4SourceBuffer] error parsing TTML "+error);
+                        });
+                    });
+            }
+            return;
+        },
+
+        convertUTFToString: function(buf, encoding) {
+            var deferred = Q.defer(),
+                blob = new Blob([buf], {
+                    type: "text/xml"
+                }),
+                f = new FileReader();
+
+            f.onload = function(e) {
+                deferred.resolve(e.target.result);
+            };
+            f.readAsText(blob, encoding);
+
+            return deferred.promise;
+        },
+
+        /**
+         * UTF-16 (LE or BE)
+         *
+         * RFC2781: UTF-16, an encoding of ISO 10646
+         *
+         * @link http://www.ietf.org/rfc/rfc2781.txt
+         * @private
+         * @ignore
+         */
+        isUTF16: function(data) {
+            var i = 0;
+            var len = data && data.length;
+            var pos = null;
+            var b1, b2, next, prev;
+
+            if (len < 2) {
+                if (data[0] > 0xFF) {
+                    return false;
+                }
+            } else {
+                b1 = data[0];
+                b2 = data[1];
+                if (b1 === 0xFF && // BOM (little-endian)
+                    b2 === 0xFE) {
+                    return true;
+                }
+                if (b1 === 0xFE && // BOM (big-endian)
+                    b2 === 0xFF) {
+                    return true;
+                }
+
+                for (; i < len; i++) {
+                    if (data[i] === 0x00) {
+                        pos = i;
+                        break;
+                    } else if (data[i] > 0xFF) {
+                        return false;
+                    }
+                }
+
+                if (pos === null) {
+                    return false; // Non ASCII
+                }
+
+                next = data[pos + 1]; // BE
+                if (next !== void 0 && next > 0x00 && next < 0x80) {
+                    return true;
+                }
+
+                prev = data[pos - 1]; // LE
+                if (prev !== void 0 && prev > 0x00 && prev < 0x80) {
+                    return true;
+                }
+            }
+
+            return false;
+        },
+
+        UpdateLang: function(id, lang){
+            currentId = id;
+            currentLang = lang;
+        },
+
+        abort: function() {
+            this.getTextTrackExtensions().deleteCues(video, true);
+        },
+
+        getTextTrackExtensions: function() {
+            return this.textTrackExtensions;
+        },
+
+        addEventListener: function(type, listener, useCapture) {
+            this.eventBus.addEventListener(type, listener, useCapture);
+            if (!this.updating)
+                this.eventBus.dispatchEvent({
+                    type: "updateend"
+                });
+        },
+
+        removeEventListener: function(type, listener, useCapture) {
+            this.eventBus.removeEventListener(type, listener, useCapture);
+        }
+    };
+};
+
+MediaPlayer.dependencies.TextTTMLXMLMP4SourceBuffer.prototype = {
+    constructor: MediaPlayer.dependencies.TextTTMLXMLMP4SourceBuffer
+};
+/*
+ * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
+ *
+ * Copyright (c) 2013, Akamai Technologies
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+ * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+ * •  Neither the name of the Akamai Technologies nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 MediaPlayer.utils.TTMLParser = function() {
     "use strict";
 
@@ -12399,915 +13283,6 @@ MediaPlayer.utils.TTMLRenderer = function() {
             removeSubtitleDiv(subtitleDivTab[i]);
             subtitleDivTab.splice(i, 1);
         }
-    };
-};
-/*
- * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
- *
- * Copyright (c) 2013, Akamai Technologies
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
- * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
- * •  Neither the name of the Akamai Technologies nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-MediaPlayer.dependencies.TextController = function() {
-
-    var LOADING = "LOADING",
-        //LOADED = "LOADED",
-        READY = "READY",
-        initialized = false,
-        periodInfo = null,
-        mediaSource,
-        data,
-        buffer,
-        availableRepresentations,
-        state = READY,
-        setState = function(value) {
-            this.debug.log("TextController setState to:" + value);
-            state = value;
-        },
-        startPlayback = function() {
-
-            if (!initialized || state !== READY) {
-                return;
-            }
-
-            var self = this;
-            // TODO Multiple tracks can be handled here by passing in quality level.
-            self.indexHandler.getInitRequest(availableRepresentations[0]).then(
-                function(request) {
-                    //self.debug.log("Loading text track initialization: " + request.url);
-                    //self.debug.log(request);
-                    self.fragmentLoader.load(request).then(onBytesLoaded.bind(self, request), onBytesError.bind(self, request));
-                    setState.call(self, LOADING);
-                }
-            );
-        },
-        doStart = function() {
-            startPlayback.call(this);
-        },
-
-        updateRepresentations = function(data, periodInfo) {
-            var adaptations,
-                manifest = this.manifestModel.getValue(),
-                idx;
-
-            idx = this.manifestExt.getDataIndex(data, manifest, periodInfo.index);
-
-            adaptations = this.manifestExt.getAdaptationsForPeriod(manifest, periodInfo);
-            return this.manifestExt.getRepresentationsForAdaptation(manifest, adaptations[idx]);
-        },
-
-        onBytesLoaded = function(request, response) {
-            var self = this;
-            //self.debug.log(" Text track Bytes finished loading: " + request.url);
-            // ORANGE: add request parameter to retrieve startTime and timescale in fragmentController
-            self.fragmentController.process(response.data, request).then(
-                function(data) {
-                    if (data !== null) {
-                        //self.debug.log("Push text track bytes: " + data.byteLength);
-                        self.sourceBufferExt.append(buffer, data, self.videoModel);
-                    }
-                }
-            );
-        },
-
-        onBytesError = function( /*request*/ ) {};
-
-    return {
-        videoModel: undefined,
-        fragmentLoader: undefined,
-        fragmentController: undefined,
-        indexHandler: undefined,
-        sourceBufferExt: undefined,
-        manifestModel: undefined,
-        manifestExt: undefined,
-        debug: undefined,
-        initialize: function(periodInfo, data, buffer, videoModel, source) {
-            var self = this;
-
-            self.setVideoModel(videoModel);
-            self.setBuffer(buffer);
-            self.setMediaSource(source);
-
-            self.updateData(data, periodInfo);
-
-            initialized = true;
-            
-            startPlayback.call(self);
-        },
-
-        setPeriodInfo: function(value) {
-            periodInfo = value;
-        },
-
-        getPeriodIndex: function() {
-            return periodInfo.index;
-        },
-
-        getVideoModel: function() {
-            return this.videoModel;
-        },
-
-        setVideoModel: function(value) {
-            this.videoModel = value;
-        },
-
-        getData: function() {
-            return data;
-        },
-
-        setData: function(value) {
-            data = value;
-        },
-
-        getBuffer: function() {
-            return buffer;
-        },
-
-        setBuffer: function(value) {
-            buffer = value;
-        },
-
-        setMediaSource: function(value) {
-            mediaSource = value;
-        },
-
-        updateData: function(dataValue, periodInfoValue) {
-            data = dataValue;
-            periodInfo = periodInfoValue;
-
-            availableRepresentations = updateRepresentations.call(this, data, periodInfo);
-            setState.call(this, READY);
-            startPlayback.call(this);
-        },
-
-        reset: function(errored) {
-            if (!errored) {
-                this.sourceBufferExt.abort(mediaSource, buffer);
-                this.sourceBufferExt.removeSourceBuffer(mediaSource, buffer);
-            }
-        },
-
-        start: doStart
-    };
-};
-
-MediaPlayer.dependencies.TextController.prototype = {
-    constructor: MediaPlayer.dependencies.TextController
-};
-/*
- * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
- *
- * Copyright (c) 2013, Akamai Technologies
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
- * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
- * •  Neither the name of the Akamai Technologies nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-MediaPlayer.dependencies.TextSourceBuffer = function () {
-
-    var video,
-        data,
-        mimeType,
-
-        decodeUtf8 = function(arrayBuffer) {
-            var result = "",
-                i = 0,
-                c = 0,
-                c2 = 0,
-                c3 = 0,
-                data = new Uint8Array(arrayBuffer);
-
-            // If we have a BOM skip it
-            if (data.length >= 3 && data[0] === 0xef && data[1] === 0xbb && data[2] === 0xbf) {
-                i = 3;
-            }
-
-            while (i < data.length) {
-                c = data[i];
-
-                if (c < 128) {
-                    result += String.fromCharCode(c);
-                    i++;
-                } else if (c > 191 && c < 224) {
-                    if (i + 1 >= data.length) {
-                        throw "UTF-8 Decode failed. Two byte character was truncated.";
-                    }
-                    c2 = data[i + 1];
-                    result += String.fromCharCode(((c & 31) << 6) | (c2 & 63));
-                    i += 2;
-                } else {
-                    if (i + 2 >= data.length) {
-                        throw "UTF-8 Decode failed. Multi byte character was truncated.";
-                    }
-                    c2 = data[i + 1];
-                    c3 = data[i + 2];
-                    result += String.fromCharCode(((c & 15) << 12) | ((c2 & 63) << 6) | (c3 & 63));
-                    i += 3;
-                }
-            }
-            return result;
-        },
-
-        buffered = {
-            length: 0,
-            ranges: [],
-
-            start: function(index) {
-                return this.ranges[index].start;
-            },
-
-            end: function(index) {
-                return this.ranges[index].end;
-            },
-
-            addRange: function(start, end) {
-                var i = 0,
-                    rangesUpdated = false,
-                    tolerance = 0.01;
-
-                //detect discontinuity in ranges.
-                for (i = 0; i < this.ranges.length; i++) {
-                    if (this.ranges[i].end <= (start + tolerance) && this.ranges[i].end >= (start - tolerance)) {
-                        rangesUpdated = true;
-                        this.ranges[i].end = end;
-                    }
-
-                    if (this.ranges[i].start <= (end + tolerance) && this.ranges[i].start >= (end - tolerance)) {
-                        rangesUpdated = true;
-                        this.ranges[i].start = start;
-                    }
-                }
-
-                if (!rangesUpdated) {
-                    this.ranges.push({
-                        start: start,
-                        end: end
-                    });
-                    this.length = this.length + 1;
-
-                    // TimeRanges must be normalized
-                    this.ranges.sort(function(a, b) {
-                        return a.start - b.start;
-                    });
-                }
-            },
-
-            removeRange: function(start, end) {
-                var i = 0;
-                for (i = this.ranges.length - 1; i >= 0; i -= 1) {
-                    if (((end === undefined || end === -1) || (this.ranges[i].end <= end)) &&
-                        ((start === undefined || start === -1) || (this.ranges[i].start >= start))) {
-                        this.ranges.splice(i, 1);
-                    }
-                }
-
-                this.length = this.ranges.length;
-            },
-
-            reset: function() {
-                this.length = 0;
-                this.ranges = [];
-            }
-        };
-
-    return {
-        system:undefined,
-        eventBus:undefined,
-        errHandler: undefined,
-        textTrackExtensions: undefined,
-        buffered: buffered,
-
-        initialize: function (type, bufferController) {
-            mimeType = type;
-            video = bufferController.getVideoModel().getElement();
-            data = bufferController.getData();
-            buffered.reset();
-        },
-
-        remove: function(start, end) {
-            if (start < 0 || start >= end) {
-                throw "INVALID_ACCESS_ERR";
-            }
-
-            this.textTrackExtensions.deleteCues(video, false, start, end);
-            this.buffered.removeRange(start, end);
-        },
-
-        append: function (bytes, request) {
-            var self = this,
-                ccContent = decodeUtf8(bytes),
-                cues = self.getParser().parse(ccContent, request);
-
-            if (video.textTracks.length === 0) {
-                // We need to create the TextTrack
-                self.textTrackExtensions.addTextTrack(video, [], data.Representation_asArray[0].id, data.lang, true);
-            }
-
-            if (video.textTracks.length === 0) {
-                // Failed to create TextTrack, should never happen
-                return;
-            }
-
-            self.textTrackExtensions.addCues(video.textTracks[0], cues);
-
-            if (request) {
-                self.buffered.addRange(request.startTime, request.startTime + request.duration);
-            }
-        },
-
-        abort: function() {
-            this.textTrackExtensions.deleteCues(video);
-            this.buffered.reset();
-        },
-
-        getParser: function() {
-            var parser;
-
-            if (mimeType === "text/vtt") {
-                parser = this.system.getObject("vttParser");
-            } /*else if (mimeType === "application/ttml+xml") {
-                parser = this.system.getObject("ttmlParser");
-            }*/
-
-            return parser;
-        },
-
-        addEventListener: function (type, listener, useCapture) {
-            this.eventBus.addEventListener(type, listener, useCapture);
-        },
-
-        removeEventListener: function (type, listener, useCapture) {
-            this.eventBus.removeEventListener(type, listener, useCapture);
-        }
-    };
-};
-
-MediaPlayer.dependencies.TextSourceBuffer.prototype = {
-    constructor: MediaPlayer.dependencies.TextSourceBuffer
-};
-
-/*
- * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
- *
- * Copyright (c) 2014, Orange
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
- * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
- * •  Neither the name of the Akamai Technologies nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-
-// Orange: This Source Buffer processes TTML+XML subtitles encapsulated in the mp4
-//         This format is used by smoothstreaming headends
-
-MediaPlayer.dependencies.TextTTMLXMLMP4SourceBuffer = function() {
-
-    var video,
-        mimeType,
-        currentLang,
-        currentId,
-
-        // We need to simulate TimeRanges, as defined 
-        // by Media Streaming Extensions.
-        // start() and end() functions must be provided,
-        // as player checks the buffer level using these
-
-        buffered = {
-            length: 0,
-            ranges: [],
-
-            start: function(index) {
-                return this.ranges[index].start;
-            },
-
-            end: function(index) {
-                return this.ranges[index].end;
-            },
-
-            addRange: function(start, end) {
-                var i = 0,
-                    rangesUpdated = false,
-                    tolerance = 0.01;
-
-                //detect discontinuity in ranges.
-                for (i = 0; i < this.ranges.length; i++) {
-                    if (this.ranges[i].end <= (start + tolerance) && this.ranges[i].end >= (start - tolerance)) {
-                        rangesUpdated = true;
-                        this.ranges[i].end = end;
-                    }
-
-                    if (this.ranges[i].start <= (end + tolerance) && this.ranges[i].start >= (end - tolerance)) {
-                        rangesUpdated = true;
-                        this.ranges[i].start = start;
-                    }
-                }
-
-                if (!rangesUpdated) {
-                    this.ranges.push({
-                        start: start,
-                        end: end
-                    });
-                    this.length = this.length + 1;
-
-                    // TimeRanges must be normalized
-                    this.ranges.sort(function(a, b) {
-                        return a.start - b.start;
-                    });
-                }
-            },
-
-            removeRange: function(start, end) {
-                var i = 0;
-                for (i = this.ranges.length - 1; i >= 0; i -= 1) {
-                    if (((end === undefined || end === -1) || (this.ranges[i].end <= end)) &&
-                        ((start === undefined || start === -1) || (this.ranges[i].start >= start))) {
-                        this.ranges.splice(i, 1);
-                    }
-                }
-
-                this.length = this.ranges.length;
-            },
-
-            reset: function() {
-                this.length = 0;
-                this.ranges = [];
-            }
-        };
-
-    return {
-        updating: false,
-        system: undefined,
-        eventBus: undefined,
-        buffered: buffered,
-        textTrackExtensions: undefined,
-        ttmlParser: undefined,
-        debug: undefined,
-        manifestModel: undefined,
-
-        initialize: function(type, bufferController, subtitleData) {
-            mimeType = type;
-            video = bufferController.getVideoModel().getElement();
-            buffered.reset();
-            currentLang = subtitleData.lang;
-            currentId = subtitleData.id;
-        },
-        remove: function(start, end) {
-            /*If start is negative or greater than duration, then throw an INVALID_ACCESS_ERR exception and abort these steps.
-            If end is less than or equal to start, then throw an INVALID_ACCESS_ERR exception and abort these steps.
-            If this object has been removed from the sourceBuffers attribute of the parent media source then throw an INVALID_STATE_ERR exception and abort these steps.
-            If the updating attribute equals true, then throw an INVALID_STATE_ERR exception and abort these steps.
-            If the readyState attribute of the parent media source is in the "ended" state then run the following steps:
-
-            Set the readyState attribute of the parent media source to "open"
-            Queue a task to fire a simple event named sourceopen at the parent media source .
-            Set the updating attribute to true.
-            Queue a task to fire a simple event named updatestart at this SourceBuffer object.
-            Return control to the caller and run the rest of the steps asynchronously.
-            Run the coded frame removal algorithm with start and end as the start and end of the removal range.
-            Set the updating attribute to false.
-            Queue a task to fire a simple event named update at this SourceBuffer object.
-            Queue a task to fire a simple event named updateend at this SourceBuffer object.*/
-            if (start < 0 || start >= end) {
-                throw "INVALID_ACCESS_ERR";
-            }
-
-            this.getTextTrackExtensions().deleteCues(video, false, start, end);
-            this.buffered.removeRange(start, end);
-        },
-
-        append: function(bytes) {
-            var self = this,
-                file = mp4lib.deserialize(bytes),
-                moov = file.getBoxByType('moov'),
-                mvhd,
-                moof,
-                mdat,
-                traf,
-                tfhd,
-                tfdt,
-                trun,
-                fragmentStart,
-                fragmentDuration = 0,
-                encoding = 'utf-8';
-
-            //no mp4, all the subtitles are in one xml file
-            if (mimeType === 'application/ttml+xml') {
-                this.track = this.textTrackExtensions.addTextTrack(video, [], currentId, currentLang, true);
-
-                //detect utf-16 encoding
-                if (self.isUTF16(bytes)) {
-                    encoding = 'utf-16';
-                }
-
-                this.convertUTFToString(bytes, encoding)
-                    .then(function(result) {
-                        self.ttmlParser.parse(result).then(function(cues) {
-                            if (cues) {
-
-                                self.textTrackExtensions.addCues(self.track, cues);
-                                self.buffered.addRange(0, video.duration);
-                                self.eventBus.dispatchEvent({
-                                    type: "updateend"
-                                });
-                            }
-                        }, function( /*error*/ ) {
-                            //self.debug.error("[TextTTMLXMLMP4SourceBuffer] error parsing TTML "+error);
-                        });
-                    });
-                return;
-            }
-
-            if (moov) {
-                // This must be an init segment, if it has a moov box.
-                // We need it to read the timescale, as it will be 
-                // used to compute fragments time ranges.
-
-                mvhd = moov.getBoxByType('mvhd');
-                self.timescale = mvhd.timescale;
-
-                // Also, it is a good moment to set up a text track on videoElement
-                // TODO: set up name and language 
-                this.track = this.textTrackExtensions.addTextTrack(video, [], currentId, currentLang, true);
-                this.eventBus.dispatchEvent({
-                    type: "updateend"
-                });
-                return;
-            }
-
-            moof = file.getBoxByType('moof');
-            if (moof) {
-
-                // This is a subtitles track fragment
-                // let's decode the data and add captions to video element
-                mdat = file.getBoxByType('mdat');
-
-                // We need to update TimeRanges.                            
-                // assume that there is a single text sample in fragment
-                traf = moof.getBoxByType('traf');
-                tfhd = traf.getBoxByType('tfhd');
-                tfdt = traf.getBoxByType('tfdt');
-                trun = traf.getBoxByType('trun');
-
-                fragmentStart = tfdt.baseMediaDecodeTime / self.timescale;
-                fragmentDuration = 0;
-                if (trun.flags & 0x000100) {
-                    fragmentDuration = trun.samples_table[0].sample_duration / self.timescale;
-                } else {
-                    fragmentDuration = tfhd.default_sample_duration / self.timescale;
-                }
-
-                self.buffered.addRange(fragmentStart, fragmentStart + fragmentDuration);
-
-                //detect utf-16 encoding
-                if (self.isUTF16(mdat.data)) {
-                    encoding = 'utf-16';
-                }
-                // parse data and add to cues
-                self.convertUTFToString(mdat.data, encoding)
-                    .then(function(result) {
-                        self.ttmlParser.parse(result).then(function(cues) {
-                            var i,
-                            manifest = self.manifestModel.getValue();
-
-                            if (cues) {
-                                if (manifest.name === 'MSS') {
-                                    for (i = 0; i < cues.length; i += 1) {
-                                        cues[i].start = cues[i].start + fragmentStart;
-                                        cues[i].end = cues[i].end + fragmentStart;
-                                    }
-                                }
-
-                                self.textTrackExtensions.addCues(self.track, cues);
-
-                                self.eventBus.dispatchEvent({
-                                    type: "updateend"
-                                });
-                            }
-                        }, function( /*error*/ ) {
-                            //self.debug.error("[TextTTMLXMLMP4SourceBuffer] error parsing TTML "+error);
-                        });
-                    });
-            }
-            return;
-        },
-
-        convertUTFToString: function(buf, encoding) {
-            var deferred = Q.defer(),
-                blob = new Blob([buf], {
-                    type: "text/xml"
-                }),
-                f = new FileReader();
-
-            f.onload = function(e) {
-                deferred.resolve(e.target.result);
-            };
-            f.readAsText(blob, encoding);
-
-            return deferred.promise;
-        },
-
-        /**
-         * UTF-16 (LE or BE)
-         *
-         * RFC2781: UTF-16, an encoding of ISO 10646
-         *
-         * @link http://www.ietf.org/rfc/rfc2781.txt
-         * @private
-         * @ignore
-         */
-        isUTF16: function(data) {
-            var i = 0;
-            var len = data && data.length;
-            var pos = null;
-            var b1, b2, next, prev;
-
-            if (len < 2) {
-                if (data[0] > 0xFF) {
-                    return false;
-                }
-            } else {
-                b1 = data[0];
-                b2 = data[1];
-                if (b1 === 0xFF && // BOM (little-endian)
-                    b2 === 0xFE) {
-                    return true;
-                }
-                if (b1 === 0xFE && // BOM (big-endian)
-                    b2 === 0xFF) {
-                    return true;
-                }
-
-                for (; i < len; i++) {
-                    if (data[i] === 0x00) {
-                        pos = i;
-                        break;
-                    } else if (data[i] > 0xFF) {
-                        return false;
-                    }
-                }
-
-                if (pos === null) {
-                    return false; // Non ASCII
-                }
-
-                next = data[pos + 1]; // BE
-                if (next !== void 0 && next > 0x00 && next < 0x80) {
-                    return true;
-                }
-
-                prev = data[pos - 1]; // LE
-                if (prev !== void 0 && prev > 0x00 && prev < 0x80) {
-                    return true;
-                }
-            }
-
-            return false;
-        },
-
-        UpdateLang: function(id, lang){
-            currentId = id;
-            currentLang = lang;
-        },
-
-        abort: function() {
-            this.getTextTrackExtensions().deleteCues(video, true);
-        },
-
-        getTextTrackExtensions: function() {
-            return this.textTrackExtensions;
-        },
-
-        addEventListener: function(type, listener, useCapture) {
-            this.eventBus.addEventListener(type, listener, useCapture);
-            if (!this.updating)
-                this.eventBus.dispatchEvent({
-                    type: "updateend"
-                });
-        },
-
-        removeEventListener: function(type, listener, useCapture) {
-            this.eventBus.removeEventListener(type, listener, useCapture);
-        }
-    };
-};
-
-MediaPlayer.dependencies.TextTTMLXMLMP4SourceBuffer.prototype = {
-    constructor: MediaPlayer.dependencies.TextTTMLXMLMP4SourceBuffer
-};
-/*
- * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
- *
- * Copyright (c) 2013, Akamai Technologies
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
- * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
- * •  Neither the name of the Akamai Technologies nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-MediaPlayer.utils.TextTrackExtensions = function() {
-    "use strict";
-    var Cue,
-        currentLanguage = "",
-        ttmlRenderer = null;
-
-    return {
-        system: undefined,
-        eventBus: undefined,
-        videoModel: undefined,
-        debug: undefined,
-        config: undefined,
-
-        setup: function() {
-            Cue = window.VTTCue || window.TextTrackCue;
-        },
-
-        cueEnter: function(subtitle_style, subtitle_text, subtitle_type) {
-            this.eventBus.dispatchEvent({
-                type: "cueEnter",
-                data: {
-                    text: subtitle_text,
-                    style: subtitle_style,
-                    type: subtitle_type
-                }
-            });
-        },
-
-        cueExit: function(subtitle_style, subtitle_text, subtitle_type) {
-            this.eventBus.dispatchEvent({
-                type: "cueExit",
-                data: {
-                    text: subtitle_text,
-                    style: subtitle_style,
-                    type: subtitle_type
-                }
-            });
-        },
-
-        getCurrentTextTrack: function(video){
-            for(var i=0; i< video.textTracks.length; i++){
-                if(video.textTracks[i].label === 'hascaption'){
-                    return video.textTracks[i];
-                }
-            }
-            return null;
-        },
-
-        addTextTrack: function(video, captionData, label, scrlang, isDefaultTrack) {
-            var track = null,
-                currentItem = null,
-                subtitleDisplayMode = 'subtitles',
-                renderingDiv = this.videoModel.getTTMLRenderingDiv(),
-                i;
-
-            //no function removeTextTrack is defined
-            //add one, only if it's necessary
-            //deleteCues will be very efficient in this case
-            track = this.getCurrentTextTrack(video);
-            if (!track) {
-                if (renderingDiv) {
-                    ttmlRenderer = this.system.getObject("ttmlRenderer");
-                    ttmlRenderer.initialize(renderingDiv);
-                }
-                subtitleDisplayMode = renderingDiv !== null ? 'metadata' : 'subtitles';
-                if (subtitleDisplayMode === 'subtitles') {
-                    subtitleDisplayMode = this.config.getParam("TextTrackExtensions.displayModeExtern", "boolean") === true ? 'metadata' : 'subtitles';
-                }
-                //TODO: Ability to define the KIND in the MPD - ie subtitle vs caption....
-                track = video.addTextTrack(subtitleDisplayMode, 'hascaption', scrlang);
-                currentLanguage = scrlang;
-                // track.default is an object property identifier that is a reserved word
-                // The following jshint directive is used to suppressed the warning "Expected an identifier and instead saw 'default' (a reserved word)"
-                /*jshint -W024 */
-                track.default = isDefaultTrack;
-                if (subtitleDisplayMode !== 'metadata') {
-                    track.mode = "showing";
-                }else{
-                    track.mode = "hidden";
-                }
-
-            } else {
-                this.cleanSubtitles();
-                track.default = isDefaultTrack;
-                if (track.mode !== 'showing' && track.kind !== 'metadata') {
-                    track.mode = "showing";
-                }
-                currentLanguage = scrlang;
-            }
-
-            for (i = 0; i < captionData.length; i += 1) {
-                currentItem = captionData[i];
-                track.addCue(new Cue(currentItem.start, currentItem.end, currentItem.data));
-            }
-
-            return track;
-        },        
-
-        onCueEnter: function(e) {
-            var renderingDiv = this.videoModel.getTTMLRenderingDiv();
-
-            if (e.currentTarget.type === 'image' && renderingDiv === null) {
-                this.debug.warn("[TextTrackExtensions] Rendering image subtitles without div is impossible");
-            }
-
-            if (renderingDiv) {
-                ttmlRenderer.onCueEnter(e);
-            }
-            this.cueEnter(e.currentTarget.style, e.currentTarget.text, e.currentTarget.type);
-        },
-
-        onCueExit: function(e) {
-            var renderingDiv = this.videoModel.getTTMLRenderingDiv();
-
-            if (renderingDiv) {
-                ttmlRenderer.onCueExit(e);
-            }
-            this.cueExit(e.currentTarget.style, e.currentTarget.text);
-        },
-
-        // Orange: addCues added so it is possible to add cues during playback,
-        //         not only during track initialization
-
-        addCues: function(track, captionData) {
-            var i = 0,
-                currentItem = null,
-                newCue = null;
-
-            for (i = 0; i < captionData.length; i += 1) {
-                currentItem = captionData[i];
-                if (currentItem.start < currentItem.end) {
-                    newCue = new Cue(currentItem.start, currentItem.end, currentItem.data);
-
-                    newCue.id = currentLanguage;
-                    newCue.type = currentItem.type;
-                    newCue.onenter = this.onCueEnter.bind(this);
-                    newCue.onexit = this.onCueExit.bind(this);
-                    newCue.snapToLines = false;
-                    newCue.line = currentItem.line;
-
-                    if (currentItem.style) {
-                        newCue.style = currentItem.style;
-                    }
-
-                    track.addCue(newCue);
-                }
-            }
-        },
-
-        deleteCues: function(video, disabled, start, end) {
-            var track = null,
-                cues = null,
-                lastIdx = null,
-                currentTrackMode,
-                i = 0;
-
-            //when multiple tracks are supported - iterate through and delete all cues from all tracks.
-            if (video) {
-                track = video.textTracks[0];
-                if (track) {
-                    currentTrackMode = track.mode;
-                    //if track mode is disabled, the cues are not accessible
-                    //we have to change the mode value to be sure the delete process is correctly executed.
-                    if (currentTrackMode === 'disabled') {
-                        track.mode = 'hidden';
-                    }
-                    cues = track.cues;
-                    if (cues) {
-                        lastIdx = cues.length - 1;
-
-                        for (i = lastIdx; i >= 0; i -= 1) {
-                            if (((end === undefined || end === -1) || (cues[i].endTime <= end)) &&
-                                ((start === undefined || start === -1) || (cues[i].startTime >= start))) {
-                                track.removeCue(cues[i]);
-                            }
-                        }
-                    }
-                    track.mode = currentTrackMode;
-                }
-            }
-        },
-
-        cleanSubtitles: function() {
-            var renderingDiv = this.videoModel.getTTMLRenderingDiv();
-            if (renderingDiv && ttmlRenderer) {
-                ttmlRenderer.cleanSubtitles();
-            }
-        },
     };
 };
 /*
@@ -14338,15 +14313,16 @@ MediaPlayer.vo.URIFragmentData.prototype = {
  * 
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-MediaPlayer.vo.metrics.BufferLevel = function () {
+MediaPlayer.vo.metrics.BufferedSwitch = function () {
     "use strict";
 
-    this.t = null;      // Real-Time | Time of the measurement of the buffer level.
-    this.level = null;  // Level of the buffer in milliseconds. Indicates the playout duration for which media data of all active media components is available starting from the current playout time.
+    this.mt = null;     // Media-Time | The media presentation time of the earliest access unit (out of all media content components) played out from the Representation.
+    this.to = null;     // value of Representation@id identifying the switch-to Representation.
+    this.lto = null;    // If not present, this metrics concerns the Representation as a whole. If present, lto indicates the value of SubRepresentation@level within Representation identifying the switch-to level of the Representation.
 };
 
-MediaPlayer.vo.metrics.BufferLevel.prototype = {
-    constructor: MediaPlayer.vo.metrics.BufferLevel
+MediaPlayer.vo.metrics.BufferedSwitch.prototype = {
+    constructor: MediaPlayer.vo.metrics.BufferedSwitch
 };
 /*
  * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
@@ -14361,16 +14337,15 @@ MediaPlayer.vo.metrics.BufferLevel.prototype = {
  * 
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-MediaPlayer.vo.metrics.BufferedSwitch = function () {
+MediaPlayer.vo.metrics.BufferLevel = function () {
     "use strict";
 
-    this.mt = null;     // Media-Time | The media presentation time of the earliest access unit (out of all media content components) played out from the Representation.
-    this.to = null;     // value of Representation@id identifying the switch-to Representation.
-    this.lto = null;    // If not present, this metrics concerns the Representation as a whole. If present, lto indicates the value of SubRepresentation@level within Representation identifying the switch-to level of the Representation.
+    this.t = null;      // Real-Time | Time of the measurement of the buffer level.
+    this.level = null;  // Level of the buffer in milliseconds. Indicates the playout duration for which media data of all active media components is available starting from the current playout time.
 };
 
-MediaPlayer.vo.metrics.BufferedSwitch.prototype = {
-    constructor: MediaPlayer.vo.metrics.BufferedSwitch
+MediaPlayer.vo.metrics.BufferLevel.prototype = {
+    constructor: MediaPlayer.vo.metrics.BufferLevel
 };
 /*
  * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
@@ -14401,29 +14376,6 @@ MediaPlayer.vo.metrics.Condition.prototype = {
 
 /*
  * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
- *
- * Copyright (c) 2014, Akamai Technologies
- * All rights reserved.
- *
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
- * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
- * •  Neither the name of the Digital Primates nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
- *
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-MediaPlayer.vo.metrics.DVRInfo = function () {
-    "use strict";
-
-    this.time = null;   // Time of the measurement of the DVR info
-    this.range = null;  // DVR range
-};
-
-MediaPlayer.vo.metrics.DVRInfo.prototype = {
-    constructor: MediaPlayer.vo.metrics.DVRInfo
-};
-/*
- * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
  * 
  * Copyright (c) 2013, Digital Primates
  * All rights reserved.
@@ -14444,6 +14396,29 @@ MediaPlayer.vo.metrics.DroppedFrames = function () {
 
 MediaPlayer.vo.metrics.DroppedFrames.prototype = {
     constructor: MediaPlayer.vo.metrics.DroppedFrames
+};
+/*
+ * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
+ *
+ * Copyright (c) 2014, Akamai Technologies
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+ * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+ * •  Neither the name of the Digital Primates nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
+MediaPlayer.vo.metrics.DVRInfo = function () {
+    "use strict";
+
+    this.time = null;   // Time of the measurement of the DVR info
+    this.range = null;  // DVR range
+};
+
+MediaPlayer.vo.metrics.DVRInfo.prototype = {
+    constructor: MediaPlayer.vo.metrics.DVRInfo
 };
 /*
  * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
@@ -14570,6 +14545,31 @@ MediaPlayer.vo.metrics.ManifestUpdate.RepresentationInfo.prototype = {
  * 
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
+MediaPlayer.vo.metrics.PlaybackQuality = function () {
+    "use strict";
+
+    this.t = null;                  // Real-Time | Time of the measurement of the playback quality
+    this.mt = null;                 // Media-Time | Media presentation time of the measurement of the playback quality
+    this.droppedFrames = null;      // Number of dropped frames
+    this.totalVideoFrames = null;   // Number of decoded video frames
+};
+
+MediaPlayer.vo.metrics.PlaybackQuality.prototype = {
+    constructor: MediaPlayer.vo.metrics.PlaybackQuality
+};
+/*
+ * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
+ * 
+ * Copyright (c) 2013, Digital Primates
+ * All rights reserved.
+ * 
+ * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
+ * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
+ * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
+ * •  Neither the name of the Digital Primates nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
+ * 
+ * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+ */
 MediaPlayer.vo.metrics.PlayList = function () {
     "use strict";
 
@@ -14629,31 +14629,6 @@ MediaPlayer.vo.metrics.PlayList.Trace.USER_REQUEST_STOP_REASON = "user_request";
 MediaPlayer.vo.metrics.PlayList.Trace.REPRESENTATION_SWITCH_STOP_REASON = "representation_switch";
 MediaPlayer.vo.metrics.PlayList.Trace.END_OF_CONTENT_STOP_REASON = "end_of_content";
 MediaPlayer.vo.metrics.PlayList.Trace.REBUFFERING_REASON = "rebuffering";
-/*
- * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
- * 
- * Copyright (c) 2013, Digital Primates
- * All rights reserved.
- * 
- * Redistribution and use in source and binary forms, with or without modification, are permitted provided that the following conditions are met:
- * •  Redistributions of source code must retain the above copyright notice, this list of conditions and the following disclaimer.
- * •  Redistributions in binary form must reproduce the above copyright notice, this list of conditions and the following disclaimer in the documentation and/or other materials provided with the distribution.
- * •  Neither the name of the Digital Primates nor the names of its contributors may be used to endorse or promote products derived from this software without specific prior written permission.
- * 
- * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
- */
-MediaPlayer.vo.metrics.PlaybackQuality = function () {
-    "use strict";
-
-    this.t = null;                  // Real-Time | Time of the measurement of the playback quality
-    this.mt = null;                 // Media-Time | Media presentation time of the measurement of the playback quality
-    this.droppedFrames = null;      // Number of dropped frames
-    this.totalVideoFrames = null;   // Number of decoded video frames
-};
-
-MediaPlayer.vo.metrics.PlaybackQuality.prototype = {
-    constructor: MediaPlayer.vo.metrics.PlaybackQuality
-};
 /*
  * The copyright in this software is being made available under the BSD License, included below. This software may be subject to other third party and contributor rights, including patent rights, and no such rights are granted under this license.
  * 
@@ -15675,7 +15650,7 @@ Dash.dependencies.DashHandler = function() {
                     template.media,
                     s.mediaRange,
                     availabilityIdx,
-                    s.tManifest);
+                    s.tManifest_asString);
             };
 
             fTimescale = representation.timescale;
@@ -15946,7 +15921,7 @@ Dash.dependencies.DashHandler = function() {
             return deferred.promise;
         },
 
-        getTimeBasedSegment = function(representation, time, duration, fTimescale, url, range, index, tManifest) {
+        getTimeBasedSegment = function(representation, time, duration, fTimescale, url, range, index, tManifest_asString) {
             var self = this,
                 scaledTime = time / fTimescale,
                 scaledDuration = Math.min(duration / fTimescale, representation.adaptation.period.mpd.maxSegmentDuration),
@@ -15974,7 +15949,7 @@ Dash.dependencies.DashHandler = function() {
             // at this wall clock time, the video element currentTime should be seg.presentationStartTime
             seg.wallStartTime = self.timelineConverter.calcWallTimeForSegment(seg, isDynamic);
 
-            seg.replacementTime = tManifest ? tManifest : time;
+            seg.replacementTime = tManifest_asString ? tManifest_asString : time;
 
             seg.replacementNumber = getNumberForSegment(seg, index);
 
@@ -19546,10 +19521,20 @@ MediaPlayer.dependencies.protection.CommonEncryption = {
 
         if (data === null)
             return [];
+		
+		console.log("data.byteLength: " + data.byteLength);
+		console.log("data.buffer type: " + typeof(data.buffer));
+		var str = "";
+		for (var i=0; i<data.byteLength; i++) {
+			str += data[i] + ", ";
+		}
+		console.log(str);
 
         var dv = new DataView(data);
         var done = false;
         var pssh = {};
+		
+		console.log("DataView created.");
 
         // TODO: Need to check every data read for end of buffer
         var byteCursor = 0;
@@ -19875,7 +19860,7 @@ MediaPlayer.dependencies.ProtectionController = function() {
                         for (i = 0; i < pendingNeedKeyData.length; i++) {
                             for (ksIdx = 0; ksIdx < pendingNeedKeyData[i].length; ksIdx++) {
                                 if (self.keySystem === pendingNeedKeyData[i][ksIdx].ks) {
-                                    self.createKeySession(pendingNeedKeyData[i][ksIdx].initData, pendingNeedKeyData[i][ksIdx].cdmData);
+                                    //self.createKeySession(pendingNeedKeyData[i][ksIdx].initData, pendingNeedKeyData[i][ksIdx].cdmData);
                                     break;
                                 }
                             }
@@ -19996,8 +19981,17 @@ MediaPlayer.dependencies.ProtectionController = function() {
                 return;
             }
 
-            xhrLicense.open(licenseServerData.getHTTPMethod(messageType), url, true);
-            xhrLicense.responseType = licenseServerData.getResponseType(keySystemString, messageType);
+            var laUrlToSend = protData && protData.laURL && protData.laURL !== "" ? protData.laURL : laURL;
+            if (protData && protData.customData) {
+                var customData = BASE64.encode(protData.customData);
+                laUrlToSend += "?LAPB="+customData.replace(/\+/g,"%2B").replace(/=/g,"%3D");
+                console.log("url["+laUrlToSend+"]");
+            }
+            xhr.open("POST", laUrlToSend);
+            xhr.responseType = "arraybuffer";
+
+            // xhrLicense.open(licenseServerData.getHTTPMethod(messageType), url, true);
+            // xhrLicense.responseType = licenseServerData.getResponseType(keySystemString, messageType);
             xhrLicense.onload = function() {
 
                 if (this.status < 200 || this.status > 299) {
@@ -20051,7 +20045,9 @@ MediaPlayer.dependencies.ProtectionController = function() {
             if (protData) {
                 updateHeaders(protData.httpRequestHeaders);
             }
-            updateHeaders(this.keySystem.getRequestHeadersFromMessage(message));
+            //updateHeaders(this.keySystem.getRequestHeadersFromMessage(message));
+
+            xhr.setRequestHeader("content-type", "text/xml; charset=UTF-8");
 
             // Set withCredentials property from protData
             if (protData && protData.withCredentials) {
@@ -20059,12 +20055,12 @@ MediaPlayer.dependencies.ProtectionController = function() {
             }
 
             this.debug.log("[DRM] Send license request");
-            var licenseRequest = this.keySystem.getLicenseRequestFromMessage(message);
+            /* var licenseRequest = this.keySystem.getLicenseRequestFromMessage(message);
             if (licenseRequest === null) {
                 this.notify(MediaPlayer.dependencies.ProtectionController.eventList.ENAME_PROTECTION_ERROR,
                     new MediaPlayer.vo.Error(MediaPlayer.dependencies.ErrorHandler.prototype.MEDIA_KEYMESSERR_NO_CHALLENGE, "No license challenge from CDM key message"));
-            }
-            xhrLicense.send(licenseRequest);
+            } */
+            xhrLicense.send(message);
         },
 
         onNeedKey = function(event) {
@@ -20184,6 +20180,7 @@ MediaPlayer.dependencies.ProtectionController = function() {
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_SESSION_CREATED, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_SESSION_CLOSED, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_SESSION_REMOVED, this);
+            this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_NEED_KEY, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_MESSAGE, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_STATUSES_CHANGED, this);
         },
@@ -22878,6 +22875,7 @@ MediaPlayer.dependencies.protection.KeySystem_PlayReady = function() {
         protData,
 
         getRequestHeaders = function(message) {
+            /*
             var msg,
                 xmlDoc,
                 headers = {},
@@ -22911,6 +22909,8 @@ MediaPlayer.dependencies.protection.KeySystem_PlayReady = function() {
             }
 
             return headers;
+            */
+            return {};
         },
 
         getLicenseRequest = function(message) {
@@ -26626,18 +26626,19 @@ Mss.dependencies.MssParser = function() {
                 chunks = this.domParser.getChildNodes(streamIndex, "c"),
                 segments = [],
                 i,
-                t, d;
+                t, d, tManifest_asString;
 
             for (i = 0; i < chunks.length; i++) {
                 // Get time and duration attributes
-                t = parseFloat(this.domParser.getAttributeValue(chunks[i], "t"));
+                tManifest_asString = this.domParser.getAttributeValue(chunks[i], "t");
+                t = parseFloat(tManifest_asString);
                 d = parseFloat(this.domParser.getAttributeValue(chunks[i], "d"));
 
                 if ((i === 0) && !t) {
                     t = 0;
                 }
 
-                if (i > 0) {
+               if (i > 0) {
                     // Update previous segment duration if not defined
                     if (!segments[segments.length - 1].d) {
                         segments[segments.length - 1].d = t - segments[segments.length - 1].t;
@@ -26645,12 +26646,23 @@ Mss.dependencies.MssParser = function() {
                     // Set segment absolute timestamp if not set
                     if (!t) {
                         t = segments[segments.length - 1].t + segments[segments.length - 1].d;
+                        tManifest_asString = (parseFloat(segments[segments.length - 1].tManifest_asString) + segments[segments.length - 1].d)+"";
+                        // To handle very large offsets in Manifest (>Number.MAX_SAFE_INTEGER)
+                        if(tManifest_asString.length > 15 ) {//max number is 16 digits (9007199254740991) so this is possible to be over (Number.isSafeInteger is not supported on IE)
+                            var t_asLong = goog.math.Long.fromString(segments[segments.length - 1].tManifest_asString);
+                            var d_asLong = goog.math.Long.fromNumber(segments[segments.length - 1].d);
+                            t_asLong = t_asLong.add(d_asLong);
+                            tManifest_asString = t_asLong.toString();
+                            this.debug.log("Large offest detected as string: "+tManifest_asString+" as number: "+t);
+                            t = t_asLong.toNumber();
+                        }
                     }
                 }
 
                 // Create new segment
                 segments.push({
                     d: d,
+                    tManifest_asString: tManifest_asString,
                     t: t
                 });
 
@@ -26903,10 +26915,11 @@ Mss.dependencies.MssParser = function() {
 
                 // Patch segment templates timestamps and determine period start time (since audio/video should not be aligned to 0)
                 if (timestampOffset > 0) {
+                    this.debug.log("timestampOffset: "+timestampOffset);
                     for (i = 0; i < adaptations.length; i++) {
                         segments = adaptations[i].SegmentTemplate.SegmentTimeline.S_asArray;
                         for (j = 0; j < segments.length; j++) {
-                            segments[j].tManifest = segments[j].t;
+                            segments[j].tManifest = segments[j].tManifest_asString;
                             segments[j].t -= timestampOffset;
                         }
                         if (adaptations[i].contentType === 'audio' || adaptations[i].contentType === 'video') {
@@ -27487,6 +27500,9 @@ Mss.dependencies.MssFragmentController = function() {
                         // No sub-sample encryption => set default sample_info_size = InitializationVector field size (8)
                         saiz.default_sample_info_size = 8;
                     }
+
+                    traf.removeBoxByType(saiz);
+                    traf.removeBoxByType(saio);
 
                     //add saio and saiz box
                     traf.boxes.push(saiz);

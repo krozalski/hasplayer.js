@@ -474,17 +474,7 @@
 
     
     <div class="description">
-        Registers a listener on the specified event.
-The possible event types are:
-<li>'error' (see <a href="MediaPlayer.html#event:error">error</a> event specification)
-<li>'warning' (see <a href="MediaPlayer.html#event:warning">warning</a> event specification)
-<li>'manifestUrlUpdate' (see <a href="MediaPlayer.html#event:manifestUrlUpdate">manifestUrlUpdate</a> event specification)
-<li>'play_bitrate' (see <a href="MediaPlayer.html#event:play_bitrate">play_bitrate</a> event specification)
-<li>'download_bitrate' (see <a href="MediaPlayer.html#event:download_bitrate">download_bitrate</a> event specification)
-<li>'bufferLevel_updated' (see <a href="MediaPlayer.html#event:bufferLevel_updated">bufferLevel_updated</a> event specification)
-<li>'state_changed' (see <a href="MediaPlayer.html#event:state_changed">state_changed</a> event specification)
-<li>'cueEnter' (see <a href="MediaPlayer.html#event:cueEnter">cueEnter</a> event specification)
-<li>'cueExit' (see <a href="MediaPlayer.html#event:cueExit">cueExit</a> event specification)
+        Registers a listener on the specified event.The possible event types are:<li>'error' (see <a href="MediaPlayer.html#event:error">error</a> event specification)<li>'warning' (see <a href="MediaPlayer.html#event:warning">warning</a> event specification)<li>'manifestUrlUpdate' (see <a href="MediaPlayer.html#event:manifestUrlUpdate">manifestUrlUpdate</a> event specification)<li>'play_bitrate' (see <a href="MediaPlayer.html#event:play_bitrate">play_bitrate</a> event specification)<li>'download_bitrate' (see <a href="MediaPlayer.html#event:download_bitrate">download_bitrate</a> event specification)<li>'bufferLevel_updated' (see <a href="MediaPlayer.html#event:bufferLevel_updated">bufferLevel_updated</a> event specification)<li>'state_changed' (see <a href="MediaPlayer.html#event:state_changed">state_changed</a> event specification)<li>'cueEnter' (see <a href="MediaPlayer.html#event:cueEnter">cueEnter</a> event specification)<li>'cueExit' (see <a href="MediaPlayer.html#event:cueExit">cueExit</a> event specification)
     </div>
     
 
@@ -3379,8 +3369,7 @@ The possible event types are:
 
     
     <div class="description">
-        Returns the list of available tracks for the stream type (as specified in the stream manifest).
-The tracks list can be retrieved once the video 'loadeddata' event has been fired.
+        Returns the list of available tracks for the stream type (as specified in the stream manifest).The tracks list can be retrieved once the video 'loadeddata' event has been fired.
     </div>
     
 
@@ -5322,11 +5311,7 @@ The tracks list can be retrieved once the video 'loadeddata' event has been fire
 
             
 
-            <td class="description last">the reason for stopping the player.
-Possible values are:
-<li>0 : stop during streaming at user request
-<li>1 : stop when all streams are completed
-<li>2 : stop after an error</td>
+            <td class="description last">the reason for stopping the player.Possible values are:<li>0 : stop during streaming at user request<li>1 : stop when all streams are completed<li>2 : stop after an error</td>
         </tr>
 
     
@@ -6201,8 +6186,7 @@ Possible values are:
 
     
     <div class="description">
-        Sets the default audio language. If the default language is available in the stream,
-the corresponding audio track is selected. Otherwise, the first declared audio track in the manifest is selected.
+        Sets the default audio language. If the default language is available in the stream,the corresponding audio track is selected. Otherwise, the first declared audio track in the manifest is selected.
     </div>
     
 
@@ -6330,8 +6314,7 @@ the corresponding audio track is selected. Otherwise, the first declared audio t
 
     
     <div class="description">
-        Sets the default subtitle language. If the default language is available in the stream,
-the corresponding subtitle track is selected. Otherwise, the first declared subtitle track in the manifest is selected.
+        Sets the default subtitle language. If the default language is available in the stream,the corresponding subtitle track is selected. Otherwise, the first declared subtitle track in the manifest is selected.
     </div>
     
 
@@ -6459,9 +6442,7 @@ the corresponding subtitle track is selected. Otherwise, the first declared subt
 
     
     <div class="description">
-        Sets the initial quality to be downloaded for the given track type.
-This method has to be used before each call to load() method to set the initial quality.
-Otherwise, the initial quality is set according to previous bandwidth condition.
+        Sets the initial quality to be downloaded for the given track type.This method has to be used before each call to load() method to set the initial quality.Otherwise, the initial quality is set according to previous bandwidth condition.
     </div>
     
 
@@ -7469,9 +7450,7 @@ Otherwise, the initial quality is set according to previous bandwidth condition.
 <dd>
     
     <div class="description">
-        Player parameters object.
-All parameters values are applied for any stream type. Parameters can be overriden specifically for audio and video track by setting
-parameters values in the params.audio and params.video objects.
+        Player parameters object.All parameters values are applied for any stream type. Parameters can be overriden specifically for audio and video track by settingparameters values in the params.audio and params.video objects.
     </div>
     
 
@@ -9450,8 +9429,7 @@ parameters values in the params.audio and params.video objects.
 
     
     <div class="description">
-        The error event is fired when an error occurs.
-When the error event is fired, the application shall stop the player.
+        The error event is fired when an error occurs.When the error event is fired, the application shall stop the player.
     </div>
     
 
@@ -9751,9 +9729,7 @@ When the error event is fired, the application shall stop the player.
 
     
     <div class="description">
-        The manifestUrlUpdate event is fired when the URL of the manifest may have to be refreshed,
-since the player failed to download the manifest file (URL expiration for example).
-The application shall therefore provide an updated manifest URL by using the method refreshManifest
+        The manifestUrlUpdate event is fired when the URL of the manifest may have to be refreshed,since the player failed to download the manifest file (URL expiration for example).The application shall therefore provide an updated manifest URL by using the method refreshManifest
     </div>
     
 
@@ -10939,7 +10915,7 @@ The application shall therefore provide an updated manifest URL by using the met
 <span class="jsdoc-message">
 	Documentation generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.4.3</a>
 	
-		on 2017-04-14T12:35:25+00:00
+		on 2017-06-16T11:40:59+02:00
 	
 	using the <a href="https://github.com/docstrap/docstrap">DocStrap template</a>.
 </span>
