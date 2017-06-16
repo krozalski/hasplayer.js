@@ -76,6 +76,26 @@ MediaPlayer.utils.Debug = function () {
         _logger = console,
 
         _log = function (logLevel, args) {
+            if (logLevel <= getLevel()) {
+
+                var message = _prepareLog(logLevel, args);
+
+                switch (logLevel) {
+                    case ERROR:
+                        _logger.error(message);
+                        break;
+                    case WARN:
+                        _logger.warn(message);
+                        break;
+                    case INFO:
+                        _logger.info(message);
+                        break;
+                    case DEBUG:
+                        _logger.debug(message);
+                        break;
+                }
+                
+            }
         },
 
         _prepareLog = function(logLevel, args){

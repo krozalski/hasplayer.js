@@ -337,14 +337,14 @@ MediaPlayer.dependencies.ProtectionController = function() {
                 return;
             }
 
-            var laUrlToSend = protData && protData.laURL && protData.laURL !== "" ? protData.laURL : laURL;
+            var laUrlToSend = protData && protData.laURL && protData.laURL !== "" ? protData.laURL : url;
             if (protData && protData.customData) {
                 var customData = BASE64.encode(protData.customData);
                 laUrlToSend += "?LAPB="+customData.replace(/\+/g,"%2B").replace(/=/g,"%3D");
                 console.log("url["+laUrlToSend+"]");
             }
-            xhr.open("POST", laUrlToSend);
-            xhr.responseType = "arraybuffer";
+            xhrLicense.open("POST", laUrlToSend);
+            xhrLicense.responseType = "arraybuffer";
 
             // xhrLicense.open(licenseServerData.getHTTPMethod(messageType), url, true);
             // xhrLicense.responseType = licenseServerData.getResponseType(keySystemString, messageType);
@@ -403,7 +403,7 @@ MediaPlayer.dependencies.ProtectionController = function() {
             }
             //updateHeaders(this.keySystem.getRequestHeadersFromMessage(message));
 
-            xhr.setRequestHeader("content-type", "text/xml; charset=UTF-8");
+            xhrLicense.setRequestHeader("content-type", "text/xml; charset=UTF-8");
 
             // Set withCredentials property from protData
             if (protData && protData.withCredentials) {

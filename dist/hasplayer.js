@@ -14,7 +14,7 @@
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Last build : 2017-6-15_16:3:27 / git revision : 15d8e40 */
+/* Last build : 2017-6-16_13:59:31 / git revision : b21e599 */
 
 (function(root, factory) {
     if (typeof define === 'function' && define.amd) {
@@ -71,8 +71,8 @@ MediaPlayer = function () {
     ////////////////////////////////////////// PRIVATE ////////////////////////////////////////////
     var VERSION_DASHJS = '1.2.0',
         VERSION = '1.10.0',
-        GIT_TAG = '15d8e40',
-        BUILD_DATE = '2017-6-15_16:3:27',
+        GIT_TAG = 'b21e599',
+        BUILD_DATE = '2017-6-16_13:59:31',
         context = new MediaPlayer.di.Context(), // default context
         system = new dijon.System(), // dijon system instance
         initialized = false,
@@ -4463,6 +4463,26 @@ MediaPlayer.utils.Debug = function () {
         _logger = console,
 
         _log = function (logLevel, args) {
+            if (logLevel <= getLevel()) {
+
+                var message = _prepareLog(logLevel, args);
+
+                switch (logLevel) {
+                    case ERROR:
+                        _logger.error(message);
+                        break;
+                    case WARN:
+                        _logger.warn(message);
+                        break;
+                    case INFO:
+                        _logger.info(message);
+                        break;
+                    case DEBUG:
+                        _logger.debug(message);
+                        break;
+                }
+                
+            }
         },
 
         _prepareLog = function(logLevel, args){
@@ -19519,103 +19539,69 @@ MediaPlayer.dependencies.protection.CommonEncryption = {
      */
     parsePSSHList: function(data) {
 
-        if (data === null)
-            return [];
-		
-		console.log("data.byteLength: " + data.byteLength);
-		console.log("data.buffer type: " + typeof(data.buffer));
-		var str = "";
-		for (var i=0; i<data.byteLength; i++) {
-			str += data[i] + ", ";
-		}
-		console.log(str);
-
-        var dv = new DataView(data);
+        if (data === null) return [];
+        var buffer = data;
+        if (!data.buffer) {
+            buffer = new Uint8Array(data);
+        }
         var done = false;
         var pssh = {};
-		
-		console.log("DataView created.");
-
-        // TODO: Need to check every data read for end of buffer
         var byteCursor = 0;
         while (!done) {
-
-            var size,
-                nextBox,
-                version,
-                systemID,
-                psshDataSize;
-            var boxStart = byteCursor;
-
-            if (byteCursor >= dv.buffer.byteLength)
-                break;
-
-            /* Box size */
-            size = dv.getUint32(byteCursor);
+            var size, nextBox, version, systemID, psshDataSize, boxStart = byteCursor;
+            if (byteCursor >= buffer.byteLength) break;
+            size = this.readBytes(buffer, byteCursor, 4);
             nextBox = byteCursor + size;
             byteCursor += 4;
-
-            /* Verify PSSH */
-            if (dv.getUint32(byteCursor) !== 0x70737368) {
+            if (this.readBytes(buffer, byteCursor, 4) !== 1886614376) {
                 byteCursor = nextBox;
                 continue;
             }
             byteCursor += 4;
-
-            /* Version must be 0 or 1 */
-            version = dv.getUint8(byteCursor);
+            version = this.readBytes(buffer, byteCursor, 1);
             if (version !== 0 && version !== 1) {
                 byteCursor = nextBox;
                 continue;
             }
-            byteCursor++;
-
-            byteCursor += 3; /* skip flags */
-
-            // 16-byte UUID/SystemID
-            systemID = '';
+            byteCursor += 1;
+            byteCursor += 3;
+            systemID = "";
             var i, val;
             for (i = 0; i < 4; i++) {
-                val = dv.getUint8(byteCursor + i).toString(16);
-                systemID += (val.length === 1) ? '0' + val : val;
+                val = this.readBytes(buffer, byteCursor + i, 1).toString(16);
+                systemID += val.length === 1 ? "0" + val : val;
             }
             byteCursor += 4;
-            systemID += '-';
+            systemID += "-";
             for (i = 0; i < 2; i++) {
-                val = dv.getUint8(byteCursor + i).toString(16);
-                systemID += (val.length === 1) ? '0' + val : val;
+                val = this.readBytes(buffer, byteCursor + i, 1).toString(16);
+                systemID += val.length === 1 ? "0" + val : val;
             }
             byteCursor += 2;
-            systemID += '-';
+            systemID += "-";
             for (i = 0; i < 2; i++) {
-                val = dv.getUint8(byteCursor + i).toString(16);
-                systemID += (val.length === 1) ? '0' + val : val;
+                val = this.readBytes(buffer, byteCursor + i, 1).toString(16);
+                systemID += val.length === 1 ? "0" + val : val;
             }
             byteCursor += 2;
-            systemID += '-';
+            systemID += "-";
             for (i = 0; i < 2; i++) {
-                val = dv.getUint8(byteCursor + i).toString(16);
-                systemID += (val.length === 1) ? '0' + val : val;
+                val = this.readBytes(buffer, byteCursor + i, 1).toString(16);
+                systemID += val.length === 1 ? "0" + val : val;
             }
             byteCursor += 2;
-            systemID += '-';
+            systemID += "-";
             for (i = 0; i < 6; i++) {
-                val = dv.getUint8(byteCursor + i).toString(16);
-                systemID += (val.length === 1) ? '0' + val : val;
+                val = this.readBytes(buffer, byteCursor + i, 1).toString(16);
+                systemID += val.length === 1 ? "0" + val : val;
             }
             byteCursor += 6;
-
             systemID = systemID.toLowerCase();
-
-            /* PSSH Data Size */
-            psshDataSize = dv.getUint32(byteCursor);
+            psshDataSize = this.readBytes(buffer, byteCursor, 4);
             byteCursor += 4;
-
-            /* PSSH Data */
-            pssh[systemID] = dv.buffer.slice(boxStart, nextBox);
+            pssh[systemID] = buffer.subarray(boxStart, nextBox).buffer;
             byteCursor = nextBox;
         }
-
         return pssh;
     },
 
@@ -19981,14 +19967,14 @@ MediaPlayer.dependencies.ProtectionController = function() {
                 return;
             }
 
-            var laUrlToSend = protData && protData.laURL && protData.laURL !== "" ? protData.laURL : laURL;
+            var laUrlToSend = protData && protData.laURL && protData.laURL !== "" ? protData.laURL : url;
             if (protData && protData.customData) {
                 var customData = BASE64.encode(protData.customData);
                 laUrlToSend += "?LAPB="+customData.replace(/\+/g,"%2B").replace(/=/g,"%3D");
                 console.log("url["+laUrlToSend+"]");
             }
-            xhr.open("POST", laUrlToSend);
-            xhr.responseType = "arraybuffer";
+            xhrLicense.open("POST", laUrlToSend);
+            xhrLicense.responseType = "arraybuffer";
 
             // xhrLicense.open(licenseServerData.getHTTPMethod(messageType), url, true);
             // xhrLicense.responseType = licenseServerData.getResponseType(keySystemString, messageType);
@@ -20047,7 +20033,7 @@ MediaPlayer.dependencies.ProtectionController = function() {
             }
             //updateHeaders(this.keySystem.getRequestHeadersFromMessage(message));
 
-            xhr.setRequestHeader("content-type", "text/xml; charset=UTF-8");
+            xhrLicense.setRequestHeader("content-type", "text/xml; charset=UTF-8");
 
             // Set withCredentials property from protData
             if (protData && protData.withCredentials) {
