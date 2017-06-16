@@ -14,7 +14,7 @@
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS “AS IS” AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-/* Last build : 2017-6-16_13:59:31 / git revision : b21e599 */
+/* Last build : 2017-6-16_15:1:47 / git revision : e12723f */
 
 (function(root, factory) {
     if (typeof define === 'function' && define.amd) {
@@ -71,8 +71,8 @@ MediaPlayer = function () {
     ////////////////////////////////////////// PRIVATE ////////////////////////////////////////////
     var VERSION_DASHJS = '1.2.0',
         VERSION = '1.10.0',
-        GIT_TAG = 'b21e599',
-        BUILD_DATE = '2017-6-16_13:59:31',
+        GIT_TAG = 'e12723f',
+        BUILD_DATE = '2017-6-16_15:1:47',
         context = new MediaPlayer.di.Context(), // default context
         system = new dijon.System(), // dijon system instance
         initialized = false,
@@ -4240,7 +4240,11 @@ MediaPlayer.di.Context = function () {
             debug = this.system.getObject("debug");
 
         // Detect EME APIs.
-        if (MediaPlayer.models.ProtectionModel_01b.detect(videoElement)) {
+        if (MediaPlayer.models.ProtectionModel_21Jan2015.detect(videoElement)) {
+            this.system.mapSingleton('protectionModel', MediaPlayer.models.ProtectionModel_21Jan2015);
+        } else if (MediaPlayer.models.ProtectionModel_3Feb2014.detect(videoElement)) {
+            this.system.mapClass('protectionModel', MediaPlayer.models.ProtectionModel_3Feb2014);
+        } else if (MediaPlayer.models.ProtectionModel_01b.detect(videoElement)) {
             this.system.mapClass('protectionModel', MediaPlayer.models.ProtectionModel_01b);
         } else {
             debug.log("No supported version of EME detected on this user agent!");

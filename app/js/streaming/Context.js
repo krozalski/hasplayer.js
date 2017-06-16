@@ -19,8 +19,12 @@ MediaPlayer.di.Context = function () {
             debug = this.system.getObject("debug");
 
         /* @if PROTECTION=true */
-        // Detect EME APIs.
-        if (MediaPlayer.models.ProtectionModel_01b.detect(videoElement)) {
+        // Detect EME APIs. Look for newest API versions first
+        if (MediaPlayer.models.ProtectionModel_21Jan2015.detect(videoElement)) {
+            this.system.mapSingleton('protectionModel', MediaPlayer.models.ProtectionModel_21Jan2015);
+        } else if (MediaPlayer.models.ProtectionModel_3Feb2014.detect(videoElement)) {
+            this.system.mapClass('protectionModel', MediaPlayer.models.ProtectionModel_3Feb2014);
+        } else if (MediaPlayer.models.ProtectionModel_01b.detect(videoElement)) {
             this.system.mapClass('protectionModel', MediaPlayer.models.ProtectionModel_01b);
         } else {
             debug.log("No supported version of EME detected on this user agent!");
