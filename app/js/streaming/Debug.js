@@ -56,7 +56,7 @@ MediaPlayer.utils.Debug = function () {
         _log = function (logLevel, args) {
             var self = this;
             if (getLogToBrowserConsole() && (logLevel <= getLevel())) {
-                var _logger = getLogger(),     
+                var _logger = getLogger(),
                     message = "",
                     logTime = null;
 
@@ -78,7 +78,7 @@ MediaPlayer.utils.Debug = function () {
                 });
 
                 switch (logLevel) {
-                    case ERROR:    
+                    case ERROR:
                         _logger.error(message);
                         break;
                     case WARN:
