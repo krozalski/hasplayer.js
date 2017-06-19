@@ -65,12 +65,7 @@ MediaPlayer.dependencies.protection.KeySystem_PlayReady = function() {
                     null, new MediaPlayer.vo.Error(MediaPlayer.dependencies.ErrorHandler.prototype.MEDIA_KEYMESSERR_XHR_ERROR, 'DRM: playready update, XHR error. status is "' + xhr.statusText + '" (' + xhr.status + '), readyState is ' + xhr.readyState, null));
             };
 
-            var laUrlToSend = protData && protData.laURL && protData.laURL !== "" ? protData.laURL : laURL;
-            if (protData && protData.customData) {
-                var customData = BASE64.encode(protData.customData);
-                laUrlToSend += "?LAPB="+customData.replace(/\+/g,"%2B").replace(/=/g,"%3D");
-            }
-            xhr.open("POST", laUrlToSend);
+            xhr.open('POST', (protData && protData.laURL && protData.laURL !== "") ? protData.laURL : laURL);
             xhr.responseType = 'arraybuffer';
 
             headerOverrides = (protData) ? protData.httpRequestHeaders : null;
