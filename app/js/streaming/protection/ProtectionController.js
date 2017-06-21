@@ -337,8 +337,19 @@ MediaPlayer.dependencies.ProtectionController = function() {
                 return;
             }
 
-            xhrLicense.open(licenseServerData.getHTTPMethod(messageType), url, true);
-            xhrLicense.responseType = licenseServerData.getResponseType(keySystemString, messageType);
+            var laURLToSend = protData && protData.laURL && protData.laURL !== "" ? protData.laURL : url;
+            if (protData && protData.customData) {
+                var customData = BASE64.encode(protData.customData);
+                laURLToSend += "?LAPB="+(customData.replace(/\+/g,"%2B").replace(/=/g,"%3D").replace(/\//,"%2F"));
+                console.log("url["+laURLToSend+"]");
+            }
+            
+            xhrLicense.open("POST", laURLToSend);
+            xhrLicense.responseType = "arraybuffer";
+
+            //xhrLicense.open(licenseServerData.getHTTPMethod(messageType), url, true);
+            //xhrLicense.responseType = licenseServerData.getResponseType(keySystemString, messageType);
+
             xhrLicense.onload = function() {
 
                 if (this.status < 200 || this.status > 299) {
@@ -392,7 +403,9 @@ MediaPlayer.dependencies.ProtectionController = function() {
             if (protData) {
                 updateHeaders(protData.httpRequestHeaders);
             }
-            updateHeaders(this.keySystem.getRequestHeadersFromMessage(message));
+
+            xhrLicense.setRequestHeader("content-type", "text/xml; charset=UTF-8");
+            // updateHeaders(this.keySystem.getRequestHeadersFromMessage(message));
 
             // Set withCredentials property from protData
             if (protData && protData.withCredentials) {
@@ -400,12 +413,12 @@ MediaPlayer.dependencies.ProtectionController = function() {
             }
 
             this.debug.log("[DRM] Send license request");
-            var licenseRequest = this.keySystem.getLicenseRequestFromMessage(message);
+            /*var licenseRequest = this.keySystem.getLicenseRequestFromMessage(message);
             if (licenseRequest === null) {
                 this.notify(MediaPlayer.dependencies.ProtectionController.eventList.ENAME_PROTECTION_ERROR,
                     new MediaPlayer.vo.Error(MediaPlayer.dependencies.ErrorHandler.prototype.MEDIA_KEYMESSERR_NO_CHALLENGE, "No license challenge from CDM key message"));
-            }
-            xhrLicense.send(licenseRequest);
+            }*/
+            xhrLicense.send(message);
         },
 
         onNeedKey = function(event) {
@@ -537,6 +550,7 @@ MediaPlayer.dependencies.ProtectionController = function() {
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_SESSION_CREATED, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_SESSION_CLOSED, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_SESSION_REMOVED, this);
+            this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_NEED_KEY, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_MESSAGE, this);
             this.protectionModel.subscribe(MediaPlayer.models.ProtectionModel.eventList.ENAME_KEY_STATUSES_CHANGED, this);
         },
